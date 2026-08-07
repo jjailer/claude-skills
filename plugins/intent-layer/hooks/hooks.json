@@ -1,0 +1,16 @@
+{
+  "description": "Flag intent-layer nodes whose code changed without them, at commit time",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/intent_layer_check.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
