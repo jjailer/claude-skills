@@ -18,6 +18,7 @@ permissionDecision does not stop the tool. The model reads this *after* the
 commit runs, which is why both sections point at `--amend`.
 """
 
+import glob
 import json
 import os
 import re
@@ -144,12 +145,20 @@ def transcript_path(event):
 
     session = event.get("session_id")
     cwd = event.get("cwd") or os.getcwd()
+    projects = os.path.expanduser("~/.claude/projects")
     slug = os.path.abspath(cwd).replace("/", "-").replace(".", "-")
-    directory = os.path.join(os.path.expanduser("~/.claude/projects"), slug)
+    directory = os.path.join(projects, slug)
     if session:
         candidate = os.path.join(directory, f"{session}.jsonl")
         if os.path.isfile(candidate):
             return candidate
+        # A session commits from wherever it happens to be, which is often not
+        # the directory it started in — so the slug above can point at a real
+        # directory belonging to some *other* session. Find this session's own
+        # file wherever it lives, and give up if it isn't there. Harvesting a
+        # different session's friction is worse than harvesting none.
+        found = glob.glob(os.path.join(projects, "*", f"{session}.jsonl"))
+        return found[0] if found else None
     try:
         files = [
             os.path.join(directory, name)
