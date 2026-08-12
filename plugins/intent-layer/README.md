@@ -1,0 +1,41 @@
+# intent-layer
+
+Keeps `CLAUDE.md` intent-layer nodes honest — the hierarchy of `CLAUDE.md` files that carries
+contracts, traps, and the sanctioned choice alongside the code.
+
+The organizing principle: **a node carries only what a capable model cannot re-derive from the
+source.** The WHAT is a grep away. A node's budget goes to the WHAT NOT and the WHY.
+
+## Components
+
+| Piece | What it does | When it costs anything |
+|---|---|---|
+| `intent-layer` skill | The doctrine — where a node belongs, what earns a line, how hard to compress, when to delete. | On demand, when you create, edit, or audit a `CLAUDE.md`. |
+| `harvest-pitfalls` skill | The triage — what a real pitfall looks like and which tier it belongs in. | On demand, when a harvest fires or you invoke it. |
+| Commit hook | On `git commit`, reports any node whose directory has changed code the same commit doesn't touch, and flags a session that shows signs of a recurring pitfall. | Nothing unless it speaks. |
+| `/harvest-pitfalls` | Manual harvest, for when the bar didn't trip but you know something happened. | When you type it. |
+| `/audit-intent-layer` | On-demand sweep for drift the commit hook can't see — a node rots when something *outside* its directory moves. | When you type it. |
+
+## The hook is built to stay quiet
+
+It says nothing when a commit updates code and its node together, nothing when the change sits under
+no node, and nothing about the repo root unless a top-level file changed — a root node nominally sits
+above everything, and a reminder that always fires is one you learn to ignore. Replayed over a
+14-node repo's history it spoke on 2 commits in 8.
+
+The pitfall harvest holds the same bar. It needs two independent signals of real friction before it
+speaks, fires once per session rather than once per commit, and gives an explicit cheap exit —
+*iteration is not a pitfall.* Without that exit a review prompt manufactures findings to justify
+itself.
+
+Requires `python3` on `PATH`.
+
+## Credit
+
+The Intent Layer concept originates with **Tyler Brandt at Intent Systems** —
+[The Intent Layer](https://intent-systems.com/blog/intent-layer), which describes it as "a thin,
+hierarchical context system that lives *inside* your repo."
+
+This plugin is an independent implementation of that idea for Claude Code: the doctrine for authoring
+nodes, plus the hooks and commands that keep them from rotting. Any opinion here that the original
+doesn't hold is mine, not theirs.

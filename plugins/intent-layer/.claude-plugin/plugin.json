@@ -1,7 +1,7 @@
 {
   "name": "intent-layer",
-  "description": "Doctrine and commit-time reminder for CLAUDE.md intent-layer nodes — how to author, compress, and prune them, plus a hook that speaks when code changes without its node.",
-  "version": "1.0.0",
+  "description": "Doctrine and commit-time reminders for CLAUDE.md intent-layer nodes — how to author, compress, and prune them, plus a hook that speaks when code changes without its node or a session shows a recurring pitfall.",
+  "version": "1.1.0",
   "author": {
     "name": "Joseph Jailer-Coley"
   }
