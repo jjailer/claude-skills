@@ -1,16 +1,58 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: flag intent-layer nodes whose code changed without them.
+"""PreToolUse hook: two commit-time reminders about the intent layer.
 
-Speaks only when a commit touches code under a CLAUDE.md that the same commit
-leaves untouched. A commit that updates code and its node together is silent.
+Node section — speaks when a commit touches code under a CLAUDE.md that the
+same commit leaves untouched. A commit that updates code and its node together
+is silent.
+
+Harvest section — speaks when the session shows independent signs of a
+recurring pitfall, so the friction gets routed into the intent layer instead of
+evaporating. The script never judges whether something *is* a pitfall; it only
+decides whether the session was eventful enough to be worth one paragraph, and
+cites the evidence. The model that lived the session does the judging — it
+knows what it assumed, which is the whole value and is unrecoverable from a
+transcript alone.
+
+Ordering caveat: a PreToolUse hook that returns additionalContext without a
+permissionDecision does not stop the tool. The model reads this *after* the
+commit runs, which is why both sections point at `--amend`.
 """
 
 import json
 import os
+import re
 import subprocess
 import sys
 
 NODE = "CLAUDE.md"
+
+# --- harvest tuning ---------------------------------------------------------
+# Fire only when this many independent signal families trip. One family alone
+# is ordinary iteration; the bar is deliberately set where a real session
+# rarely reaches it. Calibrated against replayed sessions — see README.
+FAMILIES_TO_FIRE = 2
+MAX_EVIDENCE_LINES = 3
+STATE_DIR = os.path.expanduser("~/.claude/intent-layer/harvest")
+
+# A user turn opening with one of these is plausibly a correction. Crude on
+# purpose: the model re-judges every line it is shown, so a false positive
+# costs a sentence, while a clever regex that misses real corrections costs the
+# whole feature.
+CORRECTION = re.compile(
+    r"^(no[,.! ]|nope\b|actually\b|that'?s wrong\b|don'?t\b|stop\b|"
+    r"i said\b|revert\b|undo\b|why did you\b|you (?:broke|missed|forgot)\b)",
+    re.IGNORECASE,
+)
+# pytest node ids, in either order the runner prints them.
+TEST_ID = re.compile(r"(?:^|\s)(?:FAILED|ERROR)\s+(\S+::\S+)|(\S+::\S+)\s+(?:FAILED|ERROR)")
+DENIED = "The user doesn't want to proceed with this tool use"
+TEST_PATH = re.compile(r"(^|/)(tests?|spec|__tests__)/|(^|/)test_[^/]*$|_test\.[a-z]+$")
+# Denying one of these is the review gate working, not friction worth routing.
+# Replaying real sessions, "ExitPlanMode was denied 2x" was the single largest
+# source of false fires — it means a plan got iterated on, which is the point.
+CONVERSATIONAL = frozenset(
+    {"ExitPlanMode", "AskUserQuestion", "EnterPlanMode", "TaskCreate", "TaskUpdate"}
+)
 
 
 def git(cwd, *args):
@@ -80,10 +122,273 @@ def render(found):
         more = f" (+{len(files) - 1} more)" if len(files) > 1 else ""
         lines.append(f"  {node}  <- {files[0]}{more}")
     lines.append(
-        "Did contracts, invariants, patterns, pitfalls, or dependencies change? Update or prune "
-        "the node in this same commit — or state why it needs no change. Rules: intent-layer skill."
+        "Did contracts, invariants, traps, the sanctioned choice, or dependencies change? Update "
+        "or prune the node in this same commit — or state why it needs no change. Only what a "
+        "model can't re-derive from the code earns a line. Rules: intent-layer skill."
     )
     return "\n".join(lines)
+
+
+def transcript_path(event):
+    """Locate this session's transcript, preferring what the event tells us.
+
+    `transcript_path` is documented as common to every hook payload, but no
+    captured PreToolUse payload was available to confirm it, so the derived
+    path is a real fallback rather than defensive padding: Claude Code stores
+    transcripts at ~/.claude/projects/<slug>/<session_id>.jsonl, where the slug
+    is the absolute cwd with both "/" and "." replaced by "-".
+    """
+    direct = event.get("transcript_path")
+    if direct and os.path.isfile(direct):
+        return direct
+
+    session = event.get("session_id")
+    cwd = event.get("cwd") or os.getcwd()
+    slug = os.path.abspath(cwd).replace("/", "-").replace(".", "-")
+    directory = os.path.join(os.path.expanduser("~/.claude/projects"), slug)
+    if session:
+        candidate = os.path.join(directory, f"{session}.jsonl")
+        if os.path.isfile(candidate):
+            return candidate
+    try:
+        files = [
+            os.path.join(directory, name)
+            for name in os.listdir(directory)
+            if name.endswith(".jsonl")
+        ]
+    except OSError:
+        return None
+    return max(files, key=os.path.getmtime) if files else None
+
+
+def _text(content):
+    """Flatten a tool_result content field, which is a str or a block list."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(
+            b.get("text", "") for b in content if isinstance(b, dict)
+        )
+    return ""
+
+
+def scan_session(path, cwd=None):
+    """One pass over the transcript, returning raw counts per signal family.
+
+    Sidechain (subagent) turns are skipped throughout: a subagent's retries are
+    its own business and it cannot carry a lesson back into the intent layer.
+
+    `cwd` confines the churn signal to files inside the repo. Without it, plan
+    files under ~/.claude/plans dominate: replaying real sessions they were
+    edited 7-14 times apiece and appeared in most false fires. Iterating on a
+    plan is the process working, and it says nothing about the code.
+    """
+    root = os.path.abspath(cwd) + os.sep if cwd else None
+    tools = {}           # tool_use_id -> (name, input)
+    test_fails = {}      # test id -> count
+    bash_errors = {}     # normalized command -> count
+    denials = {}         # tool name -> count
+    edits = {}           # file path -> count
+    corrections = 0
+    edit_between_failures = False
+    seen_failure = False
+
+    try:
+        handle = open(path, encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+    with handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if entry.get("isSidechain"):
+                continue
+
+            kind = entry.get("type")
+            message = entry.get("message")
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content")
+
+            if kind == "assistant" and isinstance(content, list):
+                for block in content:
+                    if not isinstance(block, dict) or block.get("type") != "tool_use":
+                        continue
+                    name = block.get("name") or ""
+                    data = block.get("input") or {}
+                    tools[block.get("id")] = (name, data)
+                    if name in ("Edit", "Write", "NotebookEdit"):
+                        target = data.get("file_path") or ""
+                        inside = not root or os.path.abspath(target).startswith(root)
+                        if target and inside and not TEST_PATH.search(target):
+                            edits[target] = edits.get(target, 0) + 1
+                            if seen_failure:
+                                edit_between_failures = True
+
+            elif kind == "user":
+                # A real user turn carries a plain string. Slash-command
+                # plumbing (<command-name>, <local-command-stdout>) arrives the
+                # same way and must not be mistaken for the user talking.
+                if isinstance(content, str) and entry.get("promptId"):
+                    stripped = content.strip()
+                    if stripped and not stripped.startswith("<"):
+                        if CORRECTION.match(stripped):
+                            corrections += 1
+                    continue
+                if not isinstance(content, list):
+                    continue
+                for block in content:
+                    if not isinstance(block, dict) or block.get("type") != "tool_result":
+                        continue
+                    name, data = tools.get(block.get("tool_use_id"), ("", {}))
+                    body = _text(block.get("content"))
+                    was_test_run = False
+                    for match in TEST_ID.finditer(body):
+                        test_id = match.group(1) or match.group(2)
+                        test_fails[test_id] = test_fails.get(test_id, 0) + 1
+                        seen_failure = True
+                        was_test_run = True
+                    if not block.get("is_error"):
+                        continue
+                    if DENIED in body:
+                        if name not in CONVERSATIONAL:
+                            denials[name] = denials.get(name, 0) + 1
+                    elif was_test_run:
+                        # A failing test run is one event, not two. Counting the
+                        # non-zero exit here as well would let a single red test
+                        # trip two "independent" families and clear the bar on
+                        # its own — which is the bar quietly deleting itself.
+                        continue
+                    elif name == "Bash":
+                        command = (data.get("command") or "").split()
+                        key = " ".join(command[:3])
+                        if key:
+                            bash_errors[key] = bash_errors.get(key, 0) + 1
+
+    return {
+        "test_fails": test_fails,
+        "edit_between_failures": edit_between_failures,
+        "bash_errors": bash_errors,
+        "corrections": corrections,
+        "denials": denials,
+        "edits": edits,
+    }
+
+
+def qualifies(scan):
+    """Turn raw counts into evidence lines, one per tripped signal family.
+
+    Each family is a different *kind* of friction, so two of them agreeing is
+    much stronger than one counter reaching two. The families, and why each
+    threshold is where it is:
+
+    S1  A test failing repeatedly is worthless on its own — red-green
+        guarantees it. The intervening edit to a non-test file is what
+        separates "a fix that didn't work" from a normal RED phase.
+    S2  The same command erroring twice is a wrong-directory or wrong-flag
+        loop, not a typo.
+    S3  Two corrections mean the misunderstanding survived the first one.
+    S4  A repeated permission denial routes to a settings allowlist, not the
+        intent layer — but it is real friction and belongs in the count.
+    S5  Weak. Churn on one file is a tiebreaker, never a reason on its own.
+    """
+    evidence = []
+
+    worst = max(scan["test_fails"].items(), key=lambda kv: kv[1], default=None)
+    if worst and worst[1] >= 2 and scan["edit_between_failures"]:
+        evidence.append(f"{worst[0]} failed {worst[1]}x across fix attempts")
+
+    for command, count in sorted(
+        scan["bash_errors"].items(), key=lambda kv: -kv[1]
+    )[:1]:
+        if count >= 2:
+            evidence.append(f"`{command}` errored {count}x")
+
+    if scan["corrections"] >= 2:
+        evidence.append(f"you corrected course {scan['corrections']}x")
+
+    for tool, count in sorted(scan["denials"].items(), key=lambda kv: -kv[1])[:1]:
+        if count >= 2:
+            evidence.append(f"{tool or 'a tool'} was denied {count}x")
+
+    busiest = max(scan["edits"].items(), key=lambda kv: kv[1], default=None)
+    if busiest and busiest[1] >= 6:
+        evidence.append(f"{busiest[0]} edited {busiest[1]}x")
+
+    return evidence
+
+
+def harvest_state(session):
+    """Evidence already reported this session, and a writer to update it.
+
+    Kept under ~/.claude rather than the repo so a harvest can never show up in
+    `git status`, and keyed by session so it expires on its own.
+    """
+    path = os.path.join(STATE_DIR, f"{session or 'unknown'}.json")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            reported = set(json.load(handle))
+    except (OSError, ValueError):
+        reported = set()
+
+    def remember(evidence):
+        try:
+            os.makedirs(STATE_DIR, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(sorted(reported | set(evidence)), handle)
+        except OSError:
+            pass
+
+    return reported, remember
+
+
+def render_harvest(evidence):
+    lines = [
+        f"This session shows {len(evidence)} signals of a recurring pitfall, "
+        "not ordinary iteration:"
+    ]
+    lines.extend(f"  {item}" for item in evidence[:MAX_EVIDENCE_LINES])
+    lines.append(
+        "Name each one in one sentence — what you assumed, what was actually true — then route it:"
+    )
+    lines.append("  re-derivable by reading the code   -> drop it; context is not free")
+    lines.append("  advisory rule you would ignore     -> PreToolUse hook")
+    lines.append("  repeatable multi-step procedure    -> skill")
+    lines.append("  non-derivable invariant or trap    -> nearest CLAUDE.md node")
+    lines.append(
+        "Land it in this commit (`git commit --amend --no-edit`; nothing is pushed yet). Nothing "
+        "durable came out of it? Say so in one line and move on — iteration is not a pitfall. "
+        "Rules: harvest-pitfalls skill."
+    )
+    return "\n".join(lines)
+
+
+def harvest(event):
+    """The harvest section, or None. Owns its own quiet ladder."""
+    path = transcript_path(event)
+    if not path:
+        return None
+    scan = scan_session(path, event.get("cwd") or os.getcwd())
+    if not scan:
+        return None
+    evidence = qualifies(scan)
+    if len(evidence) < FAMILIES_TO_FIRE:
+        return None
+
+    reported, remember = harvest_state(event.get("session_id"))
+    # Re-arm only on genuinely new friction. Without this the same two signals
+    # would be re-reported on every commit for the rest of the session.
+    fresh = [item for item in evidence if item not in reported]
+    if len(fresh) < FAMILIES_TO_FIRE:
+        return None
+    remember(evidence)
+    return render_harvest(fresh)
 
 
 def main():
@@ -115,14 +420,20 @@ def main():
     } | changed_nodes
 
     found = implicated_nodes(changed, nodes, changed_nodes)
-    if not found:
+
+    # The two sections are independent. The harvest must be able to speak when
+    # no node is implicated at all — that is the common case for a pitfall
+    # whose home is a hook or a skill rather than a node.
+    sections = [render(found) if found else None, harvest(event)]
+    message = "\n\n".join(section for section in sections if section)
+    if not message:
         return 0
 
     json.dump(
         {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
-                "additionalContext": render(found),
+                "additionalContext": message,
             }
         },
         sys.stdout,
