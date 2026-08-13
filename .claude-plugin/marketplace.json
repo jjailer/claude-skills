@@ -14,6 +14,15 @@
       },
       "source": "./plugins/intent-layer",
       "category": "documentation"
+    },
+    {
+      "name": "ruff-gate",
+      "description": "A ruff gate that travels between repos — lints the Python file it just wrote, then holds the turn open until everything the turn touched is clean. Silent in any repo without a ruff config, so it costs nothing where it isn't wanted.",
+      "author": {
+        "name": "Joseph Jailer-Coley"
+      },
+      "source": "./plugins/ruff-gate",
+      "category": "development"
     }
   ]
 }

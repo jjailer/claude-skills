@@ -1,0 +1,28 @@
+{
+  "description": "Lint edited Python with ruff, and hold the turn open until it is clean",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/ruff_gate.py\" lint",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/ruff_gate.py\" gate",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

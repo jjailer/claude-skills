@@ -7,6 +7,7 @@ Personal Claude Code plugins, shared across my projects and with anyone contribu
 ```bash
 /plugin marketplace add jjailer/claude-skills
 /plugin install intent-layer@jjc-claude-skills
+/plugin install ruff-gate@jjc-claude-skills
 ```
 
 ## Plugins
@@ -31,3 +32,22 @@ Both triggers are built to stay quiet: the node reminder spoke on 2 commits in 8
 it says anything. Requires `python3` on `PATH`.
 
 Full detail and credit for the original concept: [`plugins/intent-layer/README.md`](plugins/intent-layer/README.md).
+
+### `ruff-gate`
+
+Carries a ruff lint and format gate between repos. Install it once, globally: every repo that lints
+with ruff gets a per-edit check and a turn-level gate, and every repo that doesn't gets nothing.
+
+- **Per-edit hook** — `ruff check` on the Python file just written.
+- **Stop hook** — `ruff check` and `ruff format --check` over the files the turn touched, holding the
+  turn open until they pass. Never rewrites a file; it reports the command that would.
+- **Silent unless the repo asked** — applicability is a ruff config found above the edited file, so
+  the gate costs nothing in repos that don't lint with ruff. `.claude/ruff-gate.off`, `RUFF_GATE=off`,
+  or `"enabled": false` switches it off where one exists.
+- **Optional `.claude/ruff-gate.json`** — pin the ruff invocation, check whole directories instead of
+  touched files, or drop the format check.
+
+The governing rule is that a gate may only block you on work you are responsible for: by default it
+checks what the turn touched, never the repo's pre-existing debt. Requires `python3` and `ruff`.
+
+Full detail, configuration, and known limits: [`plugins/ruff-gate/README.md`](plugins/ruff-gate/README.md).

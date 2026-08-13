@@ -1,0 +1,8 @@
+{
+  "name": "ruff-gate",
+  "description": "A ruff gate that travels between repos — lints the Python file it just wrote, then holds the turn open until everything the turn touched is clean. Silent in any repo without a ruff config, so it costs nothing where it isn't wanted.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Joseph Jailer-Coley"
+  }
+}
