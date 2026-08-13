@@ -22,13 +22,22 @@ Three facts set every rule below.
 | Tier | Loads | Owns |
 |---|---|---|
 | `CLAUDE.md` node | ancestors at launch, subtree on read | non-derivable invariants, contracts, traps |
+| `.claude/rules/*.md`, no frontmatter | at launch, same priority as `.claude/CLAUDE.md` | a long root node's topics split into files — organization, without changing what loads |
 | `.claude/rules/*.md` with `paths:` frontmatter | when Claude reads a matching file | rules that glob across the tree rather than belonging to one directory |
 | Skill | on demand | repeatable procedures |
 
+**Two more node locations.** `CLAUDE.local.md` at the project root loads right after `CLAUDE.md` and
+is gitignored — a personal preference belongs there, not in the team's node. The managed-policy node
+(`/Library/Application Support/ClaudeCode/CLAUDE.md` on macOS) loads before everything and cannot be
+excluded; you read it, you don't author it. And an ancestor node that loads but doesn't apply — the
+monorepo case — is a settings problem, not a writing one: `claudeMdExcludes` in
+`.claude/settings.local.json` drops it by glob.
+
 **Escalation.** A rule Claude ignores under pressure is not a wording problem — write a `PreToolUse`
 hook. Anthropic: *"To block an action regardless of what Claude decides, use a PreToolUse hook
-instead."* Adding emphasis to a line already being ignored buys nothing, and if every rule is
-important then none are.
+instead."* Emphasis is not the escalation path. `IMPORTANT` on a load-bearing line the first time it
+is written does buy adherence; adding it to a line already being ignored buys nothing, and if every
+rule is important then none are.
 
 `paths:` scoping has known gaps — reported loading globally, and firing on Read but not Write. Confirm
 it actually fires before putting something load-bearing behind it.
@@ -55,6 +64,12 @@ non-obvious dependencies, and downlinks to related nodes.
 | **Invariants, not narration** | A node states what is *true now*. A line that reads like a changelog entry — "X replaced the old Y", "renamed to kill the confusion", a commit SHA, a decision date — belongs in `docs/` or git. Ticket narration ages the instant the ticket ships; invariants don't. |
 | **Never leave a tombstone** | Don't document that a symbol *was removed*. Nobody greps a name that no longer exists, so the obituary becomes the only place the dead name survives — and the node starts describing itself instead of the code. Removals are carried by git history. |
 | **Skills own procedures; nodes own invariants** | A repeatable how-to belongs in a skill, loaded on demand. Spend a node's budget on constraints a reader can't derive, not steps they'll need occasionally. |
+
+**When unsure, keep it — and never cut a prohibition for reading as generic.** Every rule above
+pushes one way, and the cut pressure will happily take a load-bearing line with it. "Never push to
+main" is derivable-looking, generic-looking, and load-bearing exactly when nobody is checking.
+Safety-critical prohibitions and agent directives are keep-always; a borderline line stays until
+whoever owns it says otherwise.
 
 ## Compression
 

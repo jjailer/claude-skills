@@ -36,6 +36,11 @@ Give each agent its node's path and this checklist:
 5. **Size** — `wc -l`. Over ~200 lines, ask whether the excess is a routing problem: procedures
    belong in a skill, file-shaped rules in `.claude/rules/`, enforcement in a hook.
 
+One rule overrides all five: **when unsure, keep it.** A borderline line stays. Never propose
+deleting a safety-critical prohibition or agent directive — "never push to main", "never edit
+`generated/`" — on the grounds that it reads as generic. Generic is what they look like when they
+are working, and an audit is the one pass with both the motive and the authority to lose them.
+
 ## Report
 
 Collect the findings into one list, ordered by cost to a reader: dangling references first, then
