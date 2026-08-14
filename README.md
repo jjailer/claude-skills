@@ -2,6 +2,18 @@
 
 Personal Claude Code plugins, shared across my projects and with anyone contributing to them.
 
+> [!WARNING]
+> **This is a personal tool first.** It is shaped around how I work, and I change it whenever my
+> habits change. Hook thresholds, skill wording, command names, and whole plugins can move, be
+> renamed, or disappear — without notice, a deprecation window, or a migration note. There is no
+> stability promise and no support commitment. You are welcome to use it; just size your
+> expectations to that.
+>
+> **Nothing updates under you.** An installed plugin stays at the version you fetched until you
+> update it yourself from the `/plugin` menu, so a breaking change here can't reach a machine that
+> hasn't asked for it. If you want a stronger guarantee than "you choose when", fork it — both
+> plugins are small, and a fork you control beats a dependency I might rewrite on a Tuesday.
+
 ## Install
 
 ```bash
@@ -31,7 +43,7 @@ Both triggers are built to stay quiet: the node reminder spoke on 2 commits in 8
 14-node repo's history, and the pitfall harvest needs two independent signals of real friction before
 it says anything. Requires `python3` on `PATH`.
 
-Full detail and credit for the original concept: [`plugins/intent-layer/README.md`](plugins/intent-layer/README.md).
+Full detail: [`plugins/intent-layer/README.md`](plugins/intent-layer/README.md).
 
 ### `ruff-gate`
 
@@ -51,3 +63,49 @@ The governing rule is that a gate may only block you on work you are responsible
 checks what the turn touched, never the repo's pre-existing debt. Requires `python3` and `ruff`.
 
 Full detail, configuration, and known limits: [`plugins/ruff-gate/README.md`](plugins/ruff-gate/README.md).
+
+## What this runs on your machine
+
+Hooks execute on your machine with your permissions, so it's fair to want the list before installing:
+
+- **No network.** Neither plugin makes an HTTP call, sends telemetry, or reports anything anywhere.
+  Everything is local `python3` and `git`.
+- **No writes to your repo.** `ruff-gate` never rewrites a file — it prints the `ruff` command that
+  would. `intent-layer` only reports; the reminder and the harvest are text, not edits.
+- **It reads your session transcript.** The `intent-layer` commit hook scans this session's
+  transcript under `~/.claude/projects/` to spot signs of a recurring pitfall, and keeps a small
+  per-session state file under `~/.claude` so it speaks once instead of once per commit. That state
+  lives outside your repo deliberately, so a harvest can never turn up in `git status`.
+
+## Backing out
+
+- **Silence one gate:** `ruff-gate` respects `.claude/ruff-gate.off`, `RUFF_GATE=off`, and
+  `"enabled": false` in `.claude/ruff-gate.json`. It is already silent in any repo with no ruff
+  config.
+- **Remove a plugin:** `/plugin uninstall intent-layer@jjc-claude-skills` (same shape for
+  `ruff-gate`).
+- **Remove the source:** `/plugin marketplace remove jjc-claude-skills`.
+
+Uninstalling takes the hooks with it, and leaves nothing behind in your repos. The only residue is
+the per-session state files under `~/.claude`, which expire on their own.
+
+## Credit
+
+The Intent Layer concept originates with **Tyler Brandt at Intent Systems** —
+[The Intent Layer](https://intent-systems.com/blog/intent-layer). The `intent-layer` plugin is an
+independent implementation of that idea for Claude Code; any opinion in it that the original doesn't
+hold is mine, not theirs.
+
+## Contributing
+
+Issues and PRs are welcome, and I'd rather hear that a hook was noisy than have you disable it
+quietly — a gate that fires when it shouldn't is a bug worth reporting. That said, this is a
+side-of-desk repo: replies may be slow, and I may decline a change that's right for your workflow
+but wrong for the one this is built around. No hard feelings either way, and forking is always a
+good answer.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE). Use it, fork it, ship it inside something else; just keep the
+copyright notice. The warranty disclaimer is the legal form of the warning at the top: this runs
+hooks on your machine, and it comes with no guarantee that it won't get in your way.

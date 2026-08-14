@@ -4,5 +4,6 @@
   "version": "1.2.0",
   "author": {
     "name": "Joseph Jailer-Coley"
-  }
+  },
+  "license": "MIT"
 }
