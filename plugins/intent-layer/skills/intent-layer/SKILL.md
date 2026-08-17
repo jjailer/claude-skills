@@ -50,6 +50,20 @@ it actually fires before putting something load-bearing behind it.
   the nearest parent node rather than inventing an empty directory. Lift it into its own node verbatim
   if the code is later packaged.
 
+Five cheap signals say where a boundary actually is. None decides alone; they agree more often than not.
+
+| Signal | Reads as a boundary when |
+|---|---|
+| **Manifest** — `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml` | The directory declares its own dependencies. Someone already drew this line; don't redraw it somewhere else. |
+| **Size** — non-generated source bytes | Roughly 80KB–256KB, the range where a node compresses something. Under it, merge up: a node costs more than it saves. Over it, split at the largest children. |
+| **Coupling** — how often two directories change in the same commit | They mostly change apart. Two directories that always change together are one boundary wearing two names, and two nodes there will contradict each other. |
+| **Cohesion** — imports crossing the boundary against imports staying inside | Most stay inside. A directory that mostly imports outward is a *layer*, not a boundary; one node covers both. |
+| **Tests** — does it own its own | It does. A directory with no tests of its own rarely owns a contract, and a node there has little to state. |
+
+Exclude lockfiles, `vendor/`, `node_modules/`, generated code, fixtures, snapshots, and migrations
+before measuring any of it. They inflate size, they poison co-change — a lockfile touches on nearly
+every commit — and they carry no intent.
+
 ## What goes in a node
 
 Purpose, key contracts and invariants, traps, the sanctioned choice where alternatives exist,
@@ -109,4 +123,7 @@ nothing.
 - **Run `/audit-intent-layer`** when you suspect drift the commit hook can't see. The hook only catches
   code changing under a node. A node also rots when something *outside* its directory moves — a shared
   contract, a dependency's API, a rule generalized elsewhere — and nothing fires for that.
+- **Run `/capture-intent-layer`** when there is no layer to maintain yet, or when one root node is
+  carrying what should be several. Placing a whole layer at once is an interview, not an edit — the
+  facts worth writing are the ones only a person holds.
 - Add cross-references when dependencies exist; prefer downlinks over embedding.
