@@ -8,11 +8,15 @@ source.** The WHAT is a grep away. A node's budget goes to the WHAT NOT and the 
 
 ## Components
 
+Two halves: `/capture-intent-layer` builds a layer, and everything else keeps it honest.
+
 | Piece | What it does | When it costs anything |
 |---|---|---|
 | `intent-layer` skill | The doctrine — where a node belongs, what earns a line, how hard to compress, when to delete. | On demand, when you create, edit, or audit a `CLAUDE.md`. |
+| `capture-intent-layer` skill | The interview — how to earn a question from the code, how parents are written from their children, where a shared fact belongs. | On demand, during a capture. |
 | `harvest-pitfalls` skill | The triage — what a real pitfall looks like and which tier it belongs in. | On demand, when a harvest fires or you invoke it. |
 | Commit hook | On `git commit`, reports any node whose directory has changed code the same commit doesn't touch, and flags a session that shows signs of a recurring pitfall. | Nothing unless it speaks. |
+| `/capture-intent-layer` | Establishes a layer on a repo that has none, by interviewing you leaf-first. Resumable; a campaign outlives the session. | When you type it, plus the attention it asks for. |
 | `/harvest-pitfalls` | Manual harvest, for when the bar didn't trip but you know something happened. | When you type it. |
 | `/audit-intent-layer` | On-demand sweep for drift the commit hook can't see — a node rots when something *outside* its directory moves. | When you type it. |
 
@@ -22,6 +26,12 @@ It says nothing when a commit updates code and its node together, nothing when t
 no node, and nothing about the repo root unless a top-level file changed — a root node nominally sits
 above everything, and a reminder that always fires is one you learn to ignore. Replayed over a
 14-node repo's history it spoke on 2 commits in 8.
+
+That silence is also how you tell whether a capture held the bar. Nodes are what the hook watches, so
+a layer with more nodes than it earned turns a quiet reminder into a constant one. If the hook starts
+speaking on every commit after a campaign, the campaign wrote nodes that hadn't earned their
+directory — `/capture-intent-layer` measures the rate before it lands and merges upward above roughly
+1 in 3.
 
 The pitfall harvest holds the same bar. It needs two independent signals of real friction before it
 speaks, fires once per session rather than once per commit, and gives an explicit cheap exit —

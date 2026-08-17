@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "intent-layer",
-      "description": "Doctrine and commit-time reminders for CLAUDE.md intent-layer nodes — how to author, compress, and prune them, plus a hook that speaks when code changes without its node or a session shows a recurring pitfall.",
+      "description": "Builds and maintains CLAUDE.md intent-layer nodes — an interview that establishes a layer from scratch, doctrine for authoring and pruning it, and a hook that speaks when code changes without its node or a session shows a recurring pitfall.",
       "author": {
         "name": "Joseph Jailer-Coley"
       },

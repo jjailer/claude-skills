@@ -30,6 +30,8 @@ Keeps `CLAUDE.md` intent-layer nodes honest — the hierarchy of `CLAUDE.md` fil
 contracts, traps, and the sanctioned choice alongside the code. A node carries only what a capable
 model cannot re-derive from the source.
 
+- **`/capture-intent-layer`** — the build. Establishes a layer on a repo that has none by
+  interviewing you leaf-first, because the facts worth writing down are the ones only a person holds.
 - **`intent-layer` skill** — the doctrine. Where a node belongs, what earns a line in one, how hard
   to compress, and when to delete.
 - **`harvest-pitfalls` skill** — the triage. What a real pitfall looks like, and whether it belongs
