@@ -3,69 +3,12 @@ description: Sweep CLAUDE.md nodes for drift the commit hook cannot see
 allowed-tools: Bash(git ls-files:*), Bash(git log:*), Bash(wc:*), Read, Grep, Glob, Task
 ---
 
-Audit the intent layer for rot.
+Audit this repo's intent layer for rot.
 
-The commit hook already catches the easy case — code changing under a node that the same commit
-doesn't touch. **This command exists for what the hook is blind to:** a node that went stale because
-something *outside* its directory moved, and a node that was true when written but is now merely
-restating the code.
+Use the `auditing-intent-layer` skill for the scope, the fan-out, the six checks, and the report
+format. It is read-only: produce the verdict list and stop before editing anything.
 
-## Scope
-
-Enumerate nodes twice, and sweep the union:
-
-1. `git ls-files -- "*CLAUDE.md"` — the committed layer.
-2. `Glob` for `**/CLAUDE.local.md`, excluding `node_modules/`, `vendor/`, and generated trees.
-
-**The second call is not redundant.** Local nodes are gitignored, so `git ls-files` cannot see them at
-all — fold this back into one pathspec and half the layer silently stops being audited. This is also
-the only automated check a local node gets: the commit hook reminds you to update one, but it cannot
-read what you wrote.
-
-If `$ARGUMENTS` names a path, restrict to nodes at or under it. Otherwise sweep all of them.
-
-## Fan out
-
-Dispatch **one agent per node, in parallel** — a single message with multiple tool calls. This
-parallelizes almost perfectly by subtree, and doing it serially on a large repo is the reason audits
-get skipped. Each agent is read-only and returns findings; it does not edit.
-
-Give each agent its node's path and this checklist:
-
-1. **Dangling references** — every file, symbol, signature, flag, or test the node names, checked
-   against the code as it is now. A reference that no longer resolves is a failure, not untidiness:
-   it sends a reader somewhere that doesn't exist.
-2. **Now-derivable lines** — anything a capable model reading the source would get right on its own.
-   These are the lines that quietly accumulate. They pass every review because they aren't *wrong*.
-3. **External drift** — the case the hook cannot see. A shared contract moved, a dependency's API
-   changed, a rule got generalized into a hub, the sanctioned choice shifted. Check what the node
-   claims about anything it does not own.
-4. **Narration and tombstones** — changelog lines, commit SHAs, decision dates, and obituaries for
-   removed symbols.
-5. **Size** — `wc -l`. Over ~200 lines, ask whether the excess is a routing problem: procedures
-   belong in a skill, file-shaped rules in `.claude/rules/`, enforcement in a hook.
-6. **Overlap with the committed node** — local nodes only, against the `CLAUDE.md` in the same
-   directory and every committed ancestor. A local line restating one of theirs is a duplicate that
-   loads last and outranks its original: **delete**. A local line contradicting one without saying so
-   is an accidental override: **correct**, by naming what it overrides. Neither is visible to anyone
-   reading only the committed layer, which is why this pass has to look.
-
-One rule overrides all five: **when unsure, keep it.** A borderline line stays. Never propose
-deleting a safety-critical prohibition or agent directive — "never push to main", "never edit
-`generated/`" — on the grounds that it reads as generic. Generic is what they look like when they
-are working, and an audit is the one pass with both the motive and the authority to lose them.
-
-## Report
-
-Collect the findings into one list, ordered by cost to a reader: dangling references first, then
-overlap, then external drift, then derivable lines, then narration, then size.
-
-For each: the node, the line, and the verdict — **delete**, **correct**, or **move** (and where).
-
-Then stop and show the list. Do not edit until $USER has seen it — a node's owner may have context
-the audit doesn't, and a sweep that prunes on its own authority is how load-bearing lines get lost.
-
-If a node is clean, say so in one line. Clean nodes are the expected case for anything recently
-touched.
+If $ARGUMENTS names a path, restrict the sweep to nodes at or under it. Otherwise sweep the whole
+layer, both variants.
 
 $ARGUMENTS

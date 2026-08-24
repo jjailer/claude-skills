@@ -1,6 +1,6 @@
 ---
 name: intent-layer
-description: Authoring, auditing, and pruning CLAUDE.md intent-layer nodes — where a node belongs, what earns a line in one, how hard to compress, and when to delete. Use when creating a new CLAUDE.md, editing or reviewing an existing one, deciding whether a rule belongs in a node vs a path-scoped rule vs a skill vs a hook, or when a commit changed contracts, traps, or dependencies that a node describes. Triggers on "add a CLAUDE.md", "create a node", "update the intent layer", "audit the CLAUDE.md files", "prune this node", "does this belong in CLAUDE.md", "the intent layer is stale", and on any commit touching code under a directory that has a CLAUDE.md.
+description: Authoring and pruning CLAUDE.md intent-layer nodes — where a node belongs, what earns a line in one, how hard to compress, and when to delete. Use when creating a new CLAUDE.md, editing or reviewing an existing one, deciding whether a rule belongs in a node vs a path-scoped rule vs a skill vs a hook, or when a commit changed contracts, traps, or dependencies that a node describes. Triggers on "add a CLAUDE.md", "create a node", "update the intent layer", "prune this node", "does this belong in CLAUDE.md", "where should this rule live", and on any commit touching code under a directory that has a CLAUDE.md.
 ---
 
 # Intent layer
@@ -32,14 +32,31 @@ excluded; you read it, you don't author it. And an ancestor node that loads but 
 monorepo case — is a settings problem, not a writing one: `claudeMdExcludes` in
 `.claude/settings.local.json` drops it by glob.
 
+`paths:` scoping has known gaps — reported loading globally, and firing on Read but not Write. Confirm
+it actually fires before putting something load-bearing behind it.
+
+## Where a rule belongs
+
+The tiers above say what each destination *is*. This says which one a given rule goes to — it is the
+one home for that decision, and everything routing into the layer works down it. **The first row that
+fits wins.**
+
+| If the rule | Goes to | Because |
+|---|---|---|
+| Is something a capable model reading the source would get right on its own | **Nowhere. Drop it.** | The WHAT is a grep away. Always-loaded context is not free, and a line restating the code is pure cost with no upside. |
+| Must hold even when there is pressure to skip it | **`PreToolUse` hook** | A node is advisory. If you would ignore the rule under a deadline, writing it more forcefully changes nothing. |
+| Is a repeatable multi-step procedure | **Skill** | Loaded on demand, so it costs nothing to the sessions that don't need it. Skills own procedures; nodes own invariants. |
+| Applies to a file *type* across the tree rather than to one directory | **`.claude/rules/*.md` with `paths:`** | Globs by pattern instead of by location — but confirm it fires, per the gaps above. |
+| Is a non-derivable invariant, contract, or trap owned by one area | **Nearest node** | 1–3 lines, invariant not narration, one home. The rest of this skill is about writing that line. |
+
+Callers with their own tiers extend this table rather than restating it — the harvest adds two rows
+for session leftovers, and capture adds one for a fact whose least common ancestor is the repo root.
+
 **Escalation.** A rule Claude ignores under pressure is not a wording problem — write a `PreToolUse`
 hook. Anthropic: *"To block an action regardless of what Claude decides, use a PreToolUse hook
 instead."* Emphasis is not the escalation path. `IMPORTANT` on a load-bearing line the first time it
 is written does buy adherence; adding it to a line already being ignored buys nothing, and if every
 rule is important then none are.
-
-`paths:` scoping has known gaps — reported loading globally, and firing on Read but not Write. Confirm
-it actually fires before putting something load-bearing behind it.
 
 ## When the node isn't yours
 
@@ -55,6 +72,7 @@ holds for the whole campaign, because permission is a property of the repo and n
 | **Never restate — add, or override in the open** | Loading last means a line copied from the committed node outranks its original, and only one of the two is reviewable, so the pair drifts with nobody watching. An override is legitimate and often the point; it has to name what it overrides. |
 | **The hook still watches it** | Struck by having been updated rather than by appearing in the commit — it can never appear in one. The obligation is unchanged; only the evidence differs. |
 | **A node arriving later gets a sibling, not an edit** | When someone else lands a directory carrying its own `CLAUDE.md`, the hook names that file, because no local node is beside it yet. Start one rather than editing theirs. The gitignore entry is what tells the hook the repo works this way, so it says this once per directory. |
+| **A directory holding both belongs to the local node** | It is the one you can write, and it resolves last. Committed is the default only when nothing answers — a directory with no local node beside it. |
 | **Promotion deletes the original** | If the layer later becomes yours to commit, content moves into the committed nodes and the local file goes. Same rule as hoisting a fact to its least common ancestor: moved, not copied and pointed at. |
 
 ## Where nodes live
@@ -92,7 +110,6 @@ non-obvious dependencies, and downlinks to related nodes.
 | **Never duplicate across nodes** | Layer-specific nodes defer to a hub; the hub owns the rule and everywhere else links to it. Copies don't just drift — when two rules contradict, Claude picks one arbitrarily. |
 | **Invariants, not narration** | A node states what is *true now*. A line that reads like a changelog entry — "X replaced the old Y", "renamed to kill the confusion", a commit SHA, a decision date — belongs in `docs/` or git. Ticket narration ages the instant the ticket ships; invariants don't. |
 | **Never leave a tombstone** | Don't document that a symbol *was removed*. Nobody greps a name that no longer exists, so the obituary becomes the only place the dead name survives — and the node starts describing itself instead of the code. Removals are carried by git history. |
-| **Skills own procedures; nodes own invariants** | A repeatable how-to belongs in a skill, loaded on demand. Spend a node's budget on constraints a reader can't derive, not steps they'll need occasionally. |
 
 **When unsure, keep it — and never cut a prohibition for reading as generic.** Every rule above
 pushes one way, and the cut pressure will happily take a load-bearing line with it. "Never push to
@@ -137,7 +154,7 @@ nothing.
   must re-verify on every change. Describing the constraint instead leaves nothing to verify, and it
   survives the rename that would have broken the citation.
 - **Harvest what went wrong.** At the end-of-feature pause, route the session's real pitfalls into the
-  right tier — see the `harvest-pitfalls` skill.
+  right tier — see the `harvesting-pitfalls` skill.
 - **Run `/audit-intent-layer`** when you suspect drift the commit hook can't see. The hook only catches
   code changing under a node. A node also rots when something *outside* its directory moves — a shared
   contract, a dependency's API, a rule generalized elsewhere — and nothing fires for that.

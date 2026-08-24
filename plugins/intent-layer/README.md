@@ -10,11 +10,17 @@ source.** The WHAT is a grep away. A node's budget goes to the WHAT NOT and the 
 
 Two halves: `/capture-intent-layer` builds a layer, and everything else keeps it honest.
 
+**Skills hold the content; commands are triggers.** A skill is named for the discipline —
+`auditing-intent-layer` — and can be loaded by anything: you, another skill, the hook. A command is
+named for the action — `/audit-intent-layer` — stays a handful of lines, and exists for the one
+thing a skill can't do, which is pre-authorise the tools the work needs.
+
 | Piece | What it does | When it costs anything |
 |---|---|---|
-| `intent-layer` skill | The doctrine — where a node belongs, what earns a line, how hard to compress, when to delete. | On demand, when you create, edit, or audit a `CLAUDE.md`. |
-| `capture-intent-layer` skill | The interview — how to earn a question from the code, how parents are written from their children, where a shared fact belongs. | On demand, during a capture. |
-| `harvest-pitfalls` skill | The triage — what a real pitfall looks like and which tier it belongs in. | On demand, when a harvest fires or you invoke it. |
+| `intent-layer` skill | The doctrine — where a node belongs, what earns a line, where a rule goes when a node isn't the answer, how hard to compress, when to delete. | On demand, when you create, edit, or review a `CLAUDE.md`. |
+| `capturing-intent-layer` skill | The campaign — surveying and chunking the repo, how to earn a question from the code, how parents are written from their children, where a shared fact belongs. | On demand, during a capture. |
+| `auditing-intent-layer` skill | The sweep — enumerating both node variants, one reader per node, verdicts without edits. | On demand, when you audit. |
+| `harvesting-pitfalls` skill | The triage — what a real pitfall looks like and which tier it belongs in. | On demand, when a harvest fires or you invoke it. |
 | Commit hook | On `git commit`, reports any node whose directory has changed code the same commit doesn't touch, and flags a session that shows signs of a recurring pitfall. | Nothing unless it speaks. |
 | `/capture-intent-layer` | Establishes a layer on a repo that has none, by interviewing you leaf-first. Asks up front whether the repo's `CLAUDE.md` files are yours to commit; if they aren't, the layer goes to gitignored `CLAUDE.local.md` and supplements them. Resumable; a campaign outlives the session. | When you type it, plus the attention it asks for. |
 | `/harvest-pitfalls` | Manual harvest, for when the bar didn't trip but you know something happened. | When you type it. |

@@ -4,7 +4,7 @@ description: Review this session for recurring pitfalls and route them into the 
 
 Review **this session** for pitfalls worth keeping, then route each one.
 
-Use the `harvest-pitfalls` skill for the bar and the routing table. Do not re-read the transcript
+Use the `harvesting-pitfalls` skill for the bar and the routing table. Do not re-read the transcript
 from disk — you lived the session, and what you assumed is the part that matters and the part a
 transcript can't recover.
 

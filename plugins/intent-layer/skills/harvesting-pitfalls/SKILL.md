@@ -1,5 +1,5 @@
 ---
-name: harvest-pitfalls
+name: harvesting-pitfalls
 description: Turning friction from the current session into a durable rule, or correctly throwing it away — what counts as a pitfall, and whether it belongs in a CLAUDE.md node, a path-scoped rule, a skill, a hook, or nowhere. Use at the end-of-feature pause before committing, when the commit hook reports signals of a recurring pitfall, or when a session went badly and you want the lesson to survive it. Triggers on "harvest pitfalls", "what went wrong this session", "capture this as a rule", "make sure this doesn't happen again", "add this to CLAUDE.md so you remember".
 ---
 
@@ -31,21 +31,21 @@ justify itself, and every fabricated rule costs context forever while protecting
 ## Route it
 
 Name the assumption in one sentence — *what you assumed, what was actually true* — then place it.
-Work down the table; the first row that fits wins.
+
+Work down the **`intent-layer` skill's *Where a rule belongs* table**. That table is the one home for
+this decision and its five rows settle most pitfalls; the first row that fits wins.
+
+If none of the five fits, a session leaves two kinds of residue that table doesn't carry, because
+neither is a rule about the code:
 
 | If | Destination | Because |
 |---|---|---|
-| A capable model reading the source would get this right | **Nowhere. Drop it.** | The WHAT is a grep away. Always-loaded context is not free, and a rule that restates the code is pure cost. |
-| It only bites when a specific command or tool runs, and it must not be skipped | **`PreToolUse` hook** | A node is advisory — *"To block an action regardless of what Claude decides, use a PreToolUse hook instead."* If you'd ignore the rule under deadline pressure, writing it more forcefully changes nothing. |
-| It's a repeatable multi-step procedure | **Skill** | Loaded on demand, so it costs nothing on sessions that don't need it. |
-| It applies to a file *type* across the tree, not one directory | **`.claude/rules/*.md` with `paths:`** | Globs by pattern instead of by location. Confirm it actually fires before relying on it. |
-| It's a non-derivable invariant, contract, or trap owned by one area | **Nearest node** | Then follow the `intent-layer` skill: 1–3 lines, invariant not narration, one home. Whichever variant the directory already has — `CLAUDE.local.md` wins a directory holding both, since it's the one you can write; committed is the default when nothing answers. |
 | It's a repeated permission prompt | **`settings.json` allowlist** | Not an intent-layer problem at all. |
 | It's in-flight, dated, or a volatile ID | **Memory, or nowhere** | It will be false next month. |
 
 ## Writing the escalation hook
 
-The rows above route most things to *drop* or *one line in a node*. The hook row is the one that
+Routing sends most things to *drop* or *one line in a node*. The hook row is the one that
 needs real work, so it's worth knowing the shape before you decide it's too expensive.
 
 A `PreToolUse` hook is a script that reads a JSON event on stdin and exits 0. To **block**, print

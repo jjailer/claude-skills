@@ -1,7 +1,7 @@
 {
   "name": "intent-layer",
   "description": "Builds and maintains CLAUDE.md intent-layer nodes — an interview that establishes a layer from scratch, doctrine for authoring and pruning it, and a hook that speaks when code changes without its node or a session shows a recurring pitfall.",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": {
     "name": "Joseph Jailer-Coley"
   },

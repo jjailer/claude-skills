@@ -476,7 +476,7 @@ def render_harvest(evidence):
     lines.append(
         "Land it in this commit (`git commit --amend --no-edit`; nothing is pushed yet). Nothing "
         "durable came out of it? Say so in one line and move on — iteration is not a pitfall. "
-        "Rules: harvest-pitfalls skill."
+        "Rules: harvesting-pitfalls skill."
     )
     return "\n".join(lines)
 
