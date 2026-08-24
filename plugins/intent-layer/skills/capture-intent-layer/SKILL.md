@@ -18,6 +18,16 @@ then spends a month deleting.
 > nothing a model can't re-derive produces no node, and a campaign that skipped zero chunks did not
 > hold the bar.
 
+**The destination is settled once, before the chunk map, and never per node.** Either you may commit
+to this repo's `CLAUDE.md` files or you may not; if you may not, the campaign writes `CLAUDE.local.md`
+throughout. The bar for a line is identical either way — see the `intent-layer` skill for why loading
+last makes a copied line dangerous.
+
+Supplementing means reading before writing. Pre-read a chunk's committed node the way you pre-read its
+code — it is input, and it decides what the local layer has left to say. A contradiction the SME
+states is not a correction you can make, since that file isn't yours to edit; park it as an override
+and write it under the `intent-layer` skill's rule for one.
+
 ## The interview
 
 **Budget the campaign, not the chunk.** At most four questions per chunk, asked in one turn, around
@@ -131,15 +141,17 @@ delete.
 
 ## Campaign state
 
-A campaign spans sessions, so three things live in
+A campaign spans sessions, so four things live in
 `~/.claude/intent-layer/capture/<repo-slug>.json` — slug built the way `intent_layer_check.py` builds
 its project slug, from the absolute path with `/` and `.` replaced by `-`:
 
-1. **The approved chunk map and its order.** Recomputing it is non-deterministic, and a different
+1. **The destination**, committed or local. Every other consumer reads it off disk; capture is the
+   only one that can't, because it writes files that don't exist yet.
+2. **The approved chunk map and its order.** Recomputing it is non-deterministic, and a different
    chunking mid-campaign silently produces overlapping nodes.
-2. **Chunks deliberately skipped, with the reason.** Without this, resume re-interviews the chunks
+3. **Chunks deliberately skipped, with the reason.** Without this, resume re-interviews the chunks
    that correctly earned nothing — forever, punishing the exact behaviour the design wants.
-3. **Parked facts, open questions, and tasks**, which by definition are in no node yet.
+4. **Parked facts, open questions, and tasks**, which by definition are in no node yet.
 
 Plus the HEAD the campaign started from, so `git diff --name-only <sha>..HEAD` on resume decides
 which boundaries moved enough to need re-chunking.

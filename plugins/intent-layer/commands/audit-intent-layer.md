@@ -12,8 +12,17 @@ restating the code.
 
 ## Scope
 
-Enumerate nodes with `git ls-files -- "*CLAUDE.md"`. If `$ARGUMENTS` names a path, restrict to nodes
-at or under it. Otherwise sweep all of them.
+Enumerate nodes twice, and sweep the union:
+
+1. `git ls-files -- "*CLAUDE.md"` — the committed layer.
+2. `Glob` for `**/CLAUDE.local.md`, excluding `node_modules/`, `vendor/`, and generated trees.
+
+**The second call is not redundant.** Local nodes are gitignored, so `git ls-files` cannot see them at
+all — fold this back into one pathspec and half the layer silently stops being audited. This is also
+the only automated check a local node gets: the commit hook reminds you to update one, but it cannot
+read what you wrote.
+
+If `$ARGUMENTS` names a path, restrict to nodes at or under it. Otherwise sweep all of them.
 
 ## Fan out
 
@@ -35,6 +44,11 @@ Give each agent its node's path and this checklist:
    removed symbols.
 5. **Size** — `wc -l`. Over ~200 lines, ask whether the excess is a routing problem: procedures
    belong in a skill, file-shaped rules in `.claude/rules/`, enforcement in a hook.
+6. **Overlap with the committed node** — local nodes only, against the `CLAUDE.md` in the same
+   directory and every committed ancestor. A local line restating one of theirs is a duplicate that
+   loads last and outranks its original: **delete**. A local line contradicting one without saying so
+   is an accidental override: **correct**, by naming what it overrides. Neither is visible to anyone
+   reading only the committed layer, which is why this pass has to look.
 
 One rule overrides all five: **when unsure, keep it.** A borderline line stays. Never propose
 deleting a safety-critical prohibition or agent directive — "never push to main", "never edit
@@ -44,7 +58,7 @@ are working, and an audit is the one pass with both the motive and the authority
 ## Report
 
 Collect the findings into one list, ordered by cost to a reader: dangling references first, then
-external drift, then derivable lines, then narration, then size.
+overlap, then external drift, then derivable lines, then narration, then size.
 
 For each: the node, the line, and the verdict — **delete**, **correct**, or **move** (and where).
 

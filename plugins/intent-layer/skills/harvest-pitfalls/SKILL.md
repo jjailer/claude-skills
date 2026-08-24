@@ -39,7 +39,7 @@ Work down the table; the first row that fits wins.
 | It only bites when a specific command or tool runs, and it must not be skipped | **`PreToolUse` hook** | A node is advisory — *"To block an action regardless of what Claude decides, use a PreToolUse hook instead."* If you'd ignore the rule under deadline pressure, writing it more forcefully changes nothing. |
 | It's a repeatable multi-step procedure | **Skill** | Loaded on demand, so it costs nothing on sessions that don't need it. |
 | It applies to a file *type* across the tree, not one directory | **`.claude/rules/*.md` with `paths:`** | Globs by pattern instead of by location. Confirm it actually fires before relying on it. |
-| It's a non-derivable invariant, contract, or trap owned by one area | **Nearest `CLAUDE.md` node** | Then follow the `intent-layer` skill: 1–3 lines, invariant not narration, one home. |
+| It's a non-derivable invariant, contract, or trap owned by one area | **Nearest node** | Then follow the `intent-layer` skill: 1–3 lines, invariant not narration, one home. Whichever variant the directory already has — `CLAUDE.local.md` wins a directory holding both, since it's the one you can write; committed is the default when nothing answers. |
 | It's a repeated permission prompt | **`settings.json` allowlist** | Not an intent-layer problem at all. |
 | It's in-flight, dated, or a volatile ID | **Memory, or nowhere** | It will be false next month. |
 

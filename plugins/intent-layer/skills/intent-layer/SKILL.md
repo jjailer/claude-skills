@@ -26,8 +26,7 @@ Three facts set every rule below.
 | `.claude/rules/*.md` with `paths:` frontmatter | when Claude reads a matching file | rules that glob across the tree rather than belonging to one directory |
 | Skill | on demand | repeatable procedures |
 
-**Two more node locations.** `CLAUDE.local.md` at the project root loads right after `CLAUDE.md` and
-is gitignored — a personal preference belongs there, not in the team's node. The managed-policy node
+**Two node locations you don't author.** The managed-policy node
 (`/Library/Application Support/ClaudeCode/CLAUDE.md` on macOS) loads before everything and cannot be
 excluded; you read it, you don't author it. And an ancestor node that loads but doesn't apply — the
 monorepo case — is a settings problem, not a writing one: `claudeMdExcludes` in
@@ -41,6 +40,22 @@ rule is important then none are.
 
 `paths:` scoping has known gaps — reported loading globally, and firing on Read but not Write. Confirm
 it actually fires before putting something load-bearing behind it.
+
+## When the node isn't yours
+
+Sometimes you may not commit to a repo's nodes at all — the layer isn't your call. Then it goes to
+`CLAUDE.local.md`, which loads right after `CLAUDE.md` in the same directory, is discovered in
+subdirectories exactly like a nested node, and is gitignored. It **supplements** whatever committed
+nodes exist rather than replacing them. `/capture-intent-layer` asks once, at the start; the answer
+holds for the whole campaign, because permission is a property of the repo and not of the fact.
+
+| Rule | Why |
+|---|---|
+| **Same bar** | The variant changes who can read the layer, never what earns a line. A file nobody reviews is where derivable filler goes to hide. |
+| **Never restate — add, or override in the open** | Loading last means a line copied from the committed node outranks its original, and only one of the two is reviewable, so the pair drifts with nobody watching. An override is legitimate and often the point; it has to name what it overrides. |
+| **The hook still watches it** | Struck by having been updated rather than by appearing in the commit — it can never appear in one. The obligation is unchanged; only the evidence differs. |
+| **A node arriving later gets a sibling, not an edit** | When someone else lands a directory carrying its own `CLAUDE.md`, the hook names that file, because no local node is beside it yet. Start one rather than editing theirs. The gitignore entry is what tells the hook the repo works this way, so it says this once per directory. |
+| **Promotion deletes the original** | If the layer later becomes yours to commit, content moves into the committed nodes and the local file goes. Same rule as hoisting a fact to its least common ancestor: moved, not copied and pointed at. |
 
 ## Where nodes live
 
@@ -103,6 +118,9 @@ whoever owns it says otherwise.
 | Goes in a node | Goes in memory |
 |---|---|
 | Durable architectural facts, contracts, traps — survives sessions, available to every agent | In-flight status, dated incidents, volatile IDs |
+
+A local node is not memory either: memory is cross-project and surfaces on relevance, while a local
+node is this-repo and loads by the same rules as any other node.
 
 When promoting from memory, **trim the memory entry to a pointer** (`see <path>/CLAUDE.md`) so the two
 can't drift. A memory entry that says "promoted to the intent layer" and then keeps a copy has promoted
