@@ -149,10 +149,11 @@ is most of them once you have read the chunk — it turns typing into clicking, 
 ends campaigns. Reserve prose for exactly one question: *what do people get wrong here?* It has no
 answer set, and it is where the highest-value content comes from.
 
-**Pre-select an option only when the code and every doc you cite agree.** A doc claim that waits on
-something the code cannot show — a migration, a vendor, a date — never agrees: the code standing
-still proves only that nobody touched it. When a doc and the code disagree, list the options with
-none marked — the SME's pick is the finding, and a recommendation hands them the answer to click.
+**When an option rests on a doc, pre-select it only when the code and that doc agree.** A doc claim
+that waits on something the code cannot show — a migration, a vendor, a date — never agrees: the
+code standing still proves only that nobody touched it. When a doc and the code disagree, list the
+options with none marked — the SME's pick is the finding, and a recommendation hands them the
+answer to click.
 
 **Earn every question from evidence.** You may only ask about something you can point at. A doc
 citation carries its date: `path (changed YYYY-MM-DD, N chunk commits since)`, from
