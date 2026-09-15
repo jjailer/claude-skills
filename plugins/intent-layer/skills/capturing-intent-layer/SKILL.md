@@ -85,7 +85,7 @@ and reading one out of it will merge boundaries that have nothing to do with eac
 the other four signals.
 
 **Tier** is path depth, and capture runs deepest-first. **Within a tier**, order ascending by
-co-change partners times distinct authors (`git shortlog -sn --since=18.months -- <dir>`). Small,
+co-change partners times distinct authors (`git shortlog -sn --since=18.months HEAD -- <dir>`). Small,
 cohesive, single-owner, well-tested chunks go first; the hub every subtree imports goes last, by
 which time the nodes around it already say what it has to satisfy. Many authors is not a
 disqualification — it is a later slot.
