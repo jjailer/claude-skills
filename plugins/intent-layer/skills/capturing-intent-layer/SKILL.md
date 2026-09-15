@@ -15,8 +15,8 @@ friendlier bar is exactly how a repo acquires twenty nodes of `ls` output that `
 then spends a month deleting.
 
 > **Chunking decides where you look. The interview decides where you write.** A chunk that produced
-> nothing a model can't re-derive produces no node, and a campaign that skipped zero chunks did not
-> hold the bar.
+> nothing a model can't re-derive produces no node, and a campaign of more than a few chunks that
+> skipped none should re-read its nodes against the bar before it closes.
 
 ## Phase 0 — Survey
 
@@ -35,7 +35,7 @@ seventeen files and a thousand lines of implementation.
 
 | Classification | Looks like |
 |---|---|
-| **greenfield** | Under ~20KB of source and no manifest declaring real dependencies. There is nothing to derive from yet. |
+| **greenfield** | Under ~20KB of source, no manifest declaring real dependencies, **and** under ~20 commits touching source (`git rev-list --count HEAD -- <source paths>`; a repo with no commits counts as zero). There is nothing to derive from yet. A small repo with real history is brownfield — it has a past to cite. |
 | **brownfield-cold** | Source, no nodes anywhere. |
 | **brownfield-seeded** | Source, and a root `CLAUDE.md` but nothing below it. |
 | **brownfield-partial** | Some nodes already exist. Capture only what they don't cover. |
@@ -79,6 +79,11 @@ for `A B` — give co-changes as `|A| + |B| - |A∪B|`. Take the ratio against t
 above roughly 40%, merge them into one chunk. It needs no `awk` and it behaves the same on every git
 version.
 
+**Write every path as its own literal argument** — `-- src/a src/b` — never through a variable. zsh
+does not word-split `$paths`, so `A B` arrives as one path that matches nothing, `|A∪B|` comes back
+zero, and every pair merges. **Check the counts before trusting the ratio:** `|A∪B|` is never below
+`max(|A|, |B|)`. If it is, the command was malformed — rerun it; don't merge on it.
+
 **Ignore that ratio when the smaller side has fewer than about ten commits.** One shared commit out
 of two is 50% and means nothing — a young or rarely-touched directory has no co-change signal at all,
 and reading one out of it will merge boundaries that have nothing to do with each other. Fall back to
@@ -118,7 +123,8 @@ commit. It sweeps both variants, so a local layer is covered without being told 
 it. Reusing the audit unmodified is deliberate: it is the same bar in its ongoing form, and routing
 capture through it means capture cannot quietly drift a friendlier one.
 
-**6 — Close.** Report in one block: chunks, nodes written, total lines, **chunks skipped and why**,
+**6 — Close.** Report in one block: chunks, candidates merged while chunking, nodes written, total
+lines, **chunks skipped and why** — a merge is not a skip; skipping is an interview outcome —
 open questions parked, tasks recorded, and which variant was written. Then sample the last 30 commits
 and count how many touched a directory that now has a node without touching that node — that is the
 rate at which the commit hook will now speak. Under about 1 in 3 is healthy. Above it, merge nodes
@@ -133,7 +139,9 @@ is. The threshold still applies — an over-noded layer is over-noded either way
 **Budget the campaign, not the chunk.** At most four questions per chunk, asked in one turn, around
 five minutes of attention. An SME asked eight questions about chunk 1 does not show up for chunk 7,
 and a half-finished campaign is the failure mode that actually happens. A chunk that seems to need
-more was under-chunked — split it and re-tier rather than spending the next chunk's budget here.
+more gets its questions ranked, not its boundary redrawn: ask the four that best earn their place
+and park the rest in `open_questions`. Split only a chunk over the size ceiling in the `intent-layer`
+skill's *Where nodes live* — below it, the halves cost more than they save.
 
 **Open with what you believe, not with what you want.** Three to five bullets first: what this area
 owns, what it doesn't, the contract you think holds, the one thing that looks wrong. Then the
@@ -158,8 +166,10 @@ answer to click.
 **Earn every question from evidence.** You may only ask about something you can point at. A doc
 citation carries its date: `path (changed YYYY-MM-DD, N chunk commits since)`, from
 `git log -1 --format='%h %cs' -- <doc>` and
-`git log --oneline <sha>..HEAD -- <chunk> ':(exclude)*.md' | wc -l` — counted from the doc's own
-commit, and code only, because the question is whether the code moved after the doc was written.
+`git log --oneline <sha>..HEAD -- <each chunk path> ':(exclude)*.md' | wc -l` — counted from the
+doc's own commit, and code only, because the question is whether the code moved after the doc was
+written. Pass every path the chunk map records for the chunk: a merged chunk spans several
+directories, and naming one of them undercounts.
 
 | You can point at | Ask | Because you cannot derive |
 |---|---|---|
@@ -269,13 +279,16 @@ describe; it will find these nodes and layer under them.
 ## Campaign state
 
 A campaign spans sessions, so four things live in
-`~/.claude/intent-layer/capture/<repo-slug>.json` — slug built the way `intent_layer_check.py` builds
-its project slug, from the absolute path with `/` and `.` replaced by `-`:
+`~/.claude/intent-layer/capture/<repo-slug>.json` — the slug is `git rev-parse --show-toplevel` with
+`/` and `.` replaced by `-`. The repo root, not the cwd: a resume from a subdirectory, or through a
+symlink like `/tmp` → `/private/tmp`, must land on the same file, and git returns the root with
+symlinks resolved.
 
 1. **The destination**, committed or local. Every other consumer reads it off disk; capture is the
    only one that can't, because it writes files that don't exist yet.
-2. **The approved chunk map and its order.** Recomputing it is non-deterministic, and a different
-   chunking mid-campaign silently produces overlapping nodes.
+2. **The approved chunk map and its order**, each chunk with every path it spans rather than a label.
+   Recomputing it is non-deterministic, and a different chunking mid-campaign silently produces
+   overlapping nodes.
 3. **Chunks deliberately skipped, with the reason.** Without this, resume re-interviews the chunks
    that correctly earned nothing — forever, punishing the exact behaviour the design wants.
 4. **Parked facts, open questions, and tasks**, which by definition are in no node yet.
