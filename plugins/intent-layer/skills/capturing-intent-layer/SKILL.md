@@ -149,7 +149,16 @@ is most of them once you have read the chunk — it turns typing into clicking, 
 ends campaigns. Reserve prose for exactly one question: *what do people get wrong here?* It has no
 answer set, and it is where the highest-value content comes from.
 
-**Earn every question from evidence.** You may only ask about something you can point at.
+**Pre-select an option only when the code and every doc you cite agree.** A doc claim that waits on
+something the code cannot show — a migration, a vendor, a date — never agrees: the code standing
+still proves only that nobody touched it. When a doc and the code disagree, list the options with
+none marked — the SME's pick is the finding, and a recommendation hands them the answer to click.
+
+**Earn every question from evidence.** You may only ask about something you can point at. A doc
+citation carries its date: `path (changed YYYY-MM-DD, N chunk commits since)`, from
+`git log -1 --format='%h %cs' -- <doc>` and
+`git log --oneline <sha>..HEAD -- <chunk> ':(exclude)*.md' | wc -l` — counted from the doc's own
+commit, and code only, because the question is whether the code moved after the doc was written.
 
 | You can point at | Ask | Because you cannot derive |
 |---|---|---|
