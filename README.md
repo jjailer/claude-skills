@@ -30,20 +30,18 @@ Keeps `CLAUDE.md` intent-layer nodes honest — the hierarchy of `CLAUDE.md` fil
 contracts, traps, and the sanctioned choice alongside the code. A node carries only what a capable
 model cannot re-derive from the source.
 
-- **`/capture-intent-layer`** — the build. Establishes a layer on a repo that has none by
+- **`/intent-layer:capturing-intent-layer [path]`** — the build. Establishes a layer on a repo that has none by
   interviewing you leaf-first, because the facts worth writing down are the ones only a person holds.
   Asks up front whether the repo's `CLAUDE.md` files are yours to commit; if they aren't, the layer
   lands in gitignored `CLAUDE.local.md` and supplements them.
 - **`intent-layer` skill** — the doctrine. Where a node belongs, what earns a line in one, where a
   rule goes when a node isn't the answer, how hard to compress, and when to delete.
-- **`auditing-intent-layer` skill** — the sweep. Both node variants enumerated, one reader per node,
+- **`/intent-layer:auditing-intent-layer [path]`** — the sweep, for drift the commit hook can't see. Both node variants enumerated, one reader per node,
   verdicts reported without editing.
-- **`harvesting-pitfalls` skill** — the triage. What a real pitfall looks like, and whether it
+- **`/intent-layer:harvesting-pitfalls [focus]`** — the triage. What a real pitfall looks like, and whether it
   belongs in a node, a path-scoped rule, a skill, or a hook.
 - **Commit-time hook** — the trigger. On `git commit`, it reports nodes whose code changed without
   them, and flags a session showing signs of a recurring pitfall.
-- **`/harvest-pitfalls`, `/audit-intent-layer`** — manual harvest, and an on-demand sweep for drift
-  the commit hook can't see.
 
 Both triggers are built to stay quiet: the node reminder spoke on 2 commits in 8 replayed over a
 14-node repo's history, and the pitfall harvest needs two independent signals of real friction before

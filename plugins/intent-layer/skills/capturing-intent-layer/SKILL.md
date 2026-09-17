@@ -1,6 +1,9 @@
 ---
 name: capturing-intent-layer
-description: Establishing an intent layer on a repo that has none — surveying and classifying the repo, chunking it at semantic boundaries, interviewing the subject-matter expert leaf-first, and rolling children's nodes up into parents without re-reading their code. Runs as a resumable campaign across sessions. Use when a repo has no CLAUDE.md hierarchy, when a single root CLAUDE.md should be several nodes, or when laying down nodes for a project before its code exists. Triggers on "set up the intent layer", "bootstrap CLAUDE.md", "capture the intent layer", "we have no CLAUDE.md files", "split the root CLAUDE.md", "interview me about this codebase".
+description: Establish an intent layer on a repo that has none, or resume one in progress — survey and chunk the repo, interview you leaf-first, and roll children's nodes up into parents. A resumable campaign across sessions. User-invoked only, because it writes files.
+argument-hint: "[path]"
+disable-model-invocation: true
+allowed-tools: Bash(git ls-files:*), Bash(git log:*), Bash(git shortlog:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git check-ignore:*), Bash(grep:*), Bash(wc:*), Bash(xargs -0 cat:*), Read, Grep, Glob, Agent, Skill, AskUserQuestion, Write, Edit
 ---
 
 # Capture an intent layer
@@ -9,302 +12,201 @@ Everything else in this plugin maintains a layer someone already built. This is 
 read the code, then ask the person who knows what the code doesn't say.
 
 **Capture does not get its own bar.** It gets a procedure. What earns a line, how hard to compress,
-and where a node belongs stay with the `intent-layer` skill, unchanged. That separation is the whole
-design: capture is the only additive operation in the plugin, and an additive operation holding a
-friendlier bar is exactly how a repo acquires twenty nodes of `ls` output that `/audit-intent-layer`
-then spends a month deleting.
+and where a node belongs stay with the `intent-layer` skill, unchanged — capture is the only additive
+operation in the plugin, and an additive operation holding a friendlier bar is how a repo acquires
+twenty nodes of `ls` output.
 
 > **Chunking decides where you look. The interview decides where you write.** A chunk that produced
-> nothing a model can't re-derive produces no node, and a campaign of more than a few chunks that
-> skipped none should re-read its nodes against the bar before it closes.
+> nothing a model can't re-derive produces no node.
+
+If invoked with a path (`$ARGUMENTS`), restrict the campaign to it.
 
 ## Phase 0 — Survey
 
-Read-only, no questions yet.
+Read-only, no questions yet. First look for campaign state (`references/campaign-state.md`).
 
 ```
 git ls-files | wc -l
-git ls-files -- '*CLAUDE.md'
-git ls-files | grep -E '(package\.json|pyproject\.toml|go\.mod|Cargo\.toml|Gemfile|\.csproj)$'
 git rev-parse HEAD
 ```
 
-Measure **source bytes**, excluding markdown, config, lockfiles, `vendor/`, `node_modules/`,
-generated code, fixtures, and snapshots. File count is the wrong measure — a docs-heavy repo can hold
-seventeen files and a thousand lines of implementation.
+Enumerate existing nodes exactly as the `auditing-intent-layer` skill's *Scope* does — both calls,
+because local nodes are untracked. Find manifests and measure **source bytes** with the commands in
+`references/chunking-signals.md`, using the exclusions in `intent-layer` → *Where nodes live*. File count is the wrong measure — a docs-heavy repo
+can hold seventeen files and a thousand lines of implementation.
 
 | Classification | Looks like |
 |---|---|
-| **greenfield** | Under ~20KB of source, no manifest declaring real dependencies, **and** under ~20 commits touching source (`git rev-list --count HEAD -- <source paths>`; a repo with no commits counts as zero). There is nothing to derive from yet. A small repo with real history is brownfield — it has a past to cite. |
+| **greenfield** | Under ~20KB of source, no manifest declaring real dependencies, **and** under ~20 commits touching source (`git rev-list --count HEAD -- <source paths>`; a repo with no commits counts as zero). A small repo with real history is brownfield — it has a past to cite. Follow `references/greenfield.md` instead of the rest of this file. |
 | **brownfield-cold** | Source, no nodes anywhere. |
 | **brownfield-seeded** | Source, and a root `CLAUDE.md` but nothing below it. |
-| **brownfield-partial** | Some nodes already exist. Capture only what they don't cover. |
+| **brownfield-partial** | Some nodes already exist. Chunk and interview only what they don't cover; existing nodes are input, like a seed. |
 | **resume** | Campaign state found for this repo. Report progress and offer to resume or restart. |
 
-If a path was named, restrict the campaign to it. Then one `AskUserQuestion` confirming the
-classification, the scope, and the destination. **That is the only question before the chunk map** —
-the destination rides in the same call, never a second turn.
+Then one `AskUserQuestion` confirming the classification, the scope, and the destination. **That is
+the only question before the chunk map.** Write `head` and `destination` to campaign state as soon as
+it is answered.
 
 ## The destination
 
-**Settled once, before the chunk map, and never per node.** Either you may commit to this repo's
-`CLAUDE.md` files or you may not; if you may not, the campaign writes `CLAUDE.local.md` throughout.
-Ask it as permission, not preference: *may you commit changes to this repo's `CLAUDE.md` files?*
-Record the answer in campaign state so a resume doesn't re-ask. Permission is a property of the repo
-and not of the fact, which is why one answer covers every chunk.
-
-What a local node *is* — load order, why it supplements rather than replaces, and the rules for
-writing one — belongs to the `intent-layer` skill's *When the node isn't yours*, including why the
-bar is identical either way. Read it there. Three things change about the **campaign**:
+**Settled once, before the chunk map, and never per node.** Ask it as permission, not preference:
+*may you commit changes to this repo's `CLAUDE.md` files?* If not, the campaign writes
+`CLAUDE.local.md` throughout — read `intent-layer` → *When the node isn't yours*
+(`../intent-layer/references/local-nodes.md` from this skill's base directory) for what a local node
+is and how to write one. Three
+things change about the **campaign**:
 
 | | In local mode |
 |---|---|
-| **Gate on the ignore first** | Before writing anything, `git check-ignore -q CLAUDE.local.md`. If it isn't ignored, stop and offer `.git/info/exclude` — the default, because it doesn't modify a tracked file, which is the whole reason you're in this mode — or `.gitignore` if the convention is worth announcing. An unignored local node gets committed, which is precisely what you lack permission to do. |
-| **Committed nodes become input** | Classify their claims the way you'd classify a seed node, but use the result to decide what the local layer must *not* repeat. Pre-read a chunk's committed node the way you pre-read its code: it is input, and it decides what the local layer has left to say. |
-| **Disagreements park as overrides** | A contradiction the SME states is not a correction you can make, since that file isn't yours to edit. Park it as a candidate override. And don't offer `/init` — it writes a committed root node. |
+| **Gate on the ignore first** | Before writing anything, `git check-ignore -q CLAUDE.local.md` and again for a nested path such as `x/CLAUDE.local.md` — an anchored `/CLAUDE.local.md` pattern passes the first and leaves every nested node committable. If either isn't ignored, stop and offer `.git/info/exclude` — the default, because it doesn't modify a tracked file — or `.gitignore` if the convention is worth announcing. An unignored local node gets committed, which is precisely what you lack permission to do. |
+| **Committed nodes are input, never edited** | Classify their claims the way you'd classify a seed, and use the result to decide what the local layer must *not* repeat. Seed (step 2) does not run: the root is not yours to rewrite. |
+| **Disagreements park as overrides** | A contradiction the SME states is not a correction you can make. Park it in `overrides`; close-out hands it back. |
 
-Write to the variant Phase 0 settled, throughout, never a mix.
+Write to the settled variant throughout, never a mix.
 
 ## Chunking
 
-Build the chunk map using the placement signals in the `intent-layer` skill's *Where nodes live*.
-Present it as a table — boundary, size, tier, order, why — and **stop for approval.** This is the
-highest-leverage checkpoint in the campaign: a bad map wastes the SME's attention and cannot be fixed
-later without re-interviewing. Fan out one read-only agent per candidate directory to gather the
-signals; that part is embarrassingly parallel. Write state only once the map is approved.
-
-**Coupling, by inclusion-exclusion**, for adjacent sibling pairs among the surviving candidates only.
-Three `git log --oneline --since=18.months -- <paths> | wc -l` calls — one for `A`, one for `B`, one
-for `A B` — give co-changes as `|A| + |B| - |A∪B|`. Take the ratio against the smaller of the two;
-above roughly 40%, merge them into one chunk. It needs no `awk` and it behaves the same on every git
-version.
-
-**Write every path as its own literal argument** — `-- src/a src/b` — never through a variable. zsh
-does not word-split `$paths`, so `A B` arrives as one path that matches nothing, `|A∪B|` comes back
-zero, and every pair merges. **Check the counts before trusting the ratio:** `|A∪B|` is never below
-`max(|A|, |B|)`. If it is, the command was malformed — rerun it; don't merge on it.
-
-**Ignore that ratio when the smaller side has fewer than about ten commits.** One shared commit out
-of two is 50% and means nothing — a young or rarely-touched directory has no co-change signal at all,
-and reading one out of it will merge boundaries that have nothing to do with each other. Fall back to
-the other four signals.
+Gather the signals from the `intent-layer` skill's *Where nodes live*, fanning out one read-only
+`Explore` agent per candidate directory. Run the git commands yourself —
+`references/chunking-signals.md` has them, the coupling arithmetic, and its traps — and give each agent
+its directory and the path to `../intent-layer/SKILL.md` for the cohesion and tests signals, since
+`Explore` agents don't load skills. No single signal decides a boundary — coupling above ~40% proposes
+a merge and says which other signals agree.
 
 **Tier** is path depth, and capture runs deepest-first. **Within a tier**, order ascending by
-co-change partners times distinct authors (`git shortlog -sn --since=18.months HEAD -- <dir>`). Small,
-cohesive, single-owner, well-tested chunks go first; the hub every subtree imports goes last, by
-which time the nodes around it already say what it has to satisfy. Many authors is not a
-disqualification — it is a later slot.
+co-change partners times distinct authors. Small, cohesive, single-owner, well-tested chunks go
+first; the hub every subtree imports goes last, by which time the nodes around it already say what it
+has to satisfy. Many authors is not a disqualification — it is a later slot.
+
+Present the map as a table — boundary, paths, size, tier, order, why — and **stop for approval.** This
+is the highest-leverage checkpoint in the campaign: a bad map wastes the SME's attention and cannot be
+fixed later without re-interviewing. Write `chunks` to state on approval.
 
 ## The campaign
 
 Chunking is step 1. The rest:
 
-**2 — Seed.** If a root node exists, treat it as draft input regardless of what wrote it — `/init`, a
-human, another tool. Classify every claim in it as derivable, non-derivable, or unverifiable, and park
-each survivor against the chunk it belongs to. Say plainly that the root node will be **rewritten, not
-appended to**, and show the diff before writing. If no root node exists, offer to run `/init` first.
+**2 — Seed.** *Committed mode only.* If a root node exists, treat it as draft input regardless of what
+wrote it. Classify every claim as derivable, non-derivable, or unverifiable, and park each survivor
+against the chunk it belongs to. Say plainly that the root node will be **rewritten, not appended
+to**, and show the diff before writing it in step 3's final tier.
 
-**3 — Capture, leaf-first.** Per chunk, in the approved order: pre-read, state what you see, ask,
-draft, one revision round, then write **or skip**. Fan out the pre-reads one agent per chunk across
-the upcoming tier, each returning what it sees plus candidate questions with their citations. That
-fan-out is a context-budget mechanism as much as a speed one — it is why you never load a whole chunk
-yourself.
+**3 — Tier by tier, deepest first.** For each tier:
 
-Interviews serialize; there is one human. Give the pre-read agents the parked facts and open questions
-as of dispatch, then re-read state immediately before asking and discard any question the intervening
-chunks already answered. Count the discards: a high rate means the tier ordering was wrong.
+1. **Pre-read.** Fan out one agent per chunk in the tier, each given the chunk's paths, the parked
+   facts that touch it, the open questions as of dispatch, and the path to this file's *The
+   interview* evidence table; each returns what it sees and candidate questions with their citations.
+   You never load a whole chunk yourself; that is what keeps the campaign inside one context. A chunk
+   with child nodes is pre-read per *Rolling up*.
+2. **Interview, one chunk at a time** — there is one human. Re-read state immediately before asking
+   and discard questions the intervening chunks already answered; a high discard rate means the tier
+   ordering was wrong. Then state what you see, ask, draft, one revision round, and write **or skip**.
+3. **Close the tier.** Land every parked fact whose least common ancestor is a chunk in this tier —
+   by now every chunk it touches is closed (*Rolling up*). No chunk in the next tier up starts until
+   this is done.
 
-**4 — Roll up.** Tier by tier upward, parents from children's nodes only. Resolve parked facts to
-their least common ancestor at each tier close. Tier boundaries are real barriers — no roll-up starts
-until the tier below it is closed.
+**4 — Compress.** Sweep the paths just written with the `auditing-intent-layer` skill — unmodified, so
+capture can't drift a friendlier bar. A campaign of more than a few chunks that skipped none is the
+likeliest to need it. Show the verdicts, apply the ones the SME approves, then (committed mode) offer
+the commit.
 
-**5 — Compress.** Sweep the paths just written with the `auditing-intent-layer` skill, **before** the
-commit. It sweeps both variants, so a local layer is covered without being told which mode produced
-it. Reusing the audit unmodified is deliberate: it is the same bar in its ongoing form, and routing
-capture through it means capture cannot quietly drift a friendlier one.
+**5 — Close.** Report in one block: chunks, merges proposed while chunking, nodes written, total
+lines, **chunks skipped and why** — a merge is not a skip; skipping is an interview outcome — open
+questions, tasks, overrides, and which variant was written. Then replay the commit hook over recent
+history, from the plugin's `hooks/intent_layer_check.py` (two directories above this skill's base
+directory):
 
-**6 — Close.** Report in one block: chunks, candidates merged while chunking, nodes written, total
-lines, **chunks skipped and why** — a merge is not a skip; skipping is an interview outcome —
-open questions parked, tasks recorded, and which variant was written. Then sample the last 30 commits
-and count how many touched a directory that now has a node without touching that node — that is the
-rate at which the commit hook will now speak. Under about 1 in 3 is healthy. Above it, merge nodes
-upward before landing.
+```
+python3 <plugin>/hooks/intent_layer_check.py --replay 30
+```
 
-For a local layer that count is an **upper bound**, not the rate: a local node is struck by your
-having updated it rather than by the commit, which the history can't show. Report it as the bound it
-is. The threshold still applies — an over-noded layer is over-noded either way.
+`rate` is how often the hook will now speak, using the hook's own nearest-node rule, across the whole
+repo even when the campaign was scoped to a path — read `nodes` for the scoped ones. Under about 1 in
+3 is healthy; above it, merge nodes upward before landing. For a local layer the output says
+`local_upper_bound` — a local node is struck by the clock, which history can't show — and the
+threshold still applies. Close out campaign state per `references/campaign-state.md`.
 
 ## The interview
 
-**Budget the campaign, not the chunk.** At most four questions per chunk, asked in one turn, around
-five minutes of attention. An SME asked eight questions about chunk 1 does not show up for chunk 7,
-and a half-finished campaign is the failure mode that actually happens. A chunk that seems to need
-more gets its questions ranked, not its boundary redrawn: ask the four that best earn their place
-and park the rest in `open_questions`. Split only a chunk over the size ceiling in the `intent-layer`
-skill's *Where nodes live* — below it, the halves cost more than they save.
+**Budget the campaign, not the chunk.** At most four questions per chunk, one turn, around five
+minutes of attention. An SME asked eight questions about chunk 1 does not show up for chunk 7, and a
+half-finished campaign is the failure mode that actually happens. Rank a chunk's questions and park the
+rest in `open_questions`; split only a chunk over the size ceiling in `intent-layer` → *Where nodes
+live*.
 
 **Open with what you believe, not with what you want.** Three to five bullets first: what this area
-owns, what it doesn't, the contract you think holds, the one thing that looks wrong. Then the
-questions.
+owns, what it doesn't, the contract you think holds, the one thing that looks wrong. An SME corrects a
+wrong sentence in five seconds and answers an open question in five minutes — and the correction is
+the more valuable artifact, because it names an assumption the code did not prevent. That is the
+definition of a trap.
 
-An SME corrects a wrong sentence in five seconds and answers an open question in five minutes — and
-the correction is the more valuable artifact, because it names an assumption a model made that the
-code did not prevent. That is the definition of a trap.
+**Shape: one `AskUserQuestion` call, up to four questions.**
 
-**Shape: at most three `AskUserQuestion` options-questions plus one open prose question, in a single
-turn.** Use multiple choice wherever you have a hypothesis and two to four candidate answers, which
-is most of them once you have read the chunk — it turns typing into clicking, and typing is what
-ends campaigns. Reserve prose for exactly one question: *what do people get wrong here?* It has no
-answer set, and it is where the highest-value content comes from.
+- **Up to three options-questions**, wherever you have a hypothesis. Each has at most three candidate
+  answers plus **"I don't know"** — the tool allows four options and adds "Other" itself.
+- **One prose question, last:** *what do people get wrong here?* Give it options like "Nothing comes to
+  mind" and "Someone else would know"; the real answer arrives typed in "Other". It has no answer set,
+  and it is where the highest-value content comes from.
 
-**When an option rests on a doc, pre-select it only when the code and that doc agree.** A doc claim
-that waits on something the code cannot show — a migration, a vendor, a date — never agrees: the
-code standing still proves only that nobody touched it. When a doc and the code disagree, list the
-options with none marked — the SME's pick is the finding, and a recommendation hands them the
-answer to click.
+**When an option rests on a doc, recommend it only when the code and that doc agree** — list it first
+with "(Recommended)" in its label. A doc claim that waits on something the code cannot show — a
+migration, a vendor, a date — never agrees: the code standing still proves only that nobody touched
+it. When a doc and the code disagree, recommend nothing — the SME's pick is the finding.
 
 **Earn every question from evidence.** You may only ask about something you can point at. A doc
 citation carries its date: `path (changed YYYY-MM-DD, N chunk commits since)`, from
 `git log -1 --format='%h %cs' -- <doc>` and
-`git log --oneline <sha>..HEAD -- <each chunk path> ':(exclude)*.md' | wc -l` — counted from the
-doc's own commit, and code only, because the question is whether the code moved after the doc was
-written. Pass every path the chunk map records for the chunk: a merged chunk spans several
-directories, and naming one of them undercounts.
+`git log --oneline <sha>..HEAD -- <each chunk path> <exclusions> | wc -l` — code only, so the full
+exclusion set from *Where nodes live* including markdown, counted from the doc's own commit, across
+every path the chunk spans.
 
 | You can point at | Ask | Because you cannot derive |
 |---|---|---|
-| Two live implementations of the same thing | "Which do I write next, and what happens to the other?" | Which pattern is sanctioned mid-migration. The code shows both and says nothing. |
+| Two live implementations of the same thing | "Which do I write next, and what happens to the other?" | Which pattern is sanctioned mid-migration. |
 | A swallowed exception, a retry with no backoff, a `# don't` comment | "What went wrong that put this here?" | The incident the guard encodes. |
 | A module every other module imports | "What is allowed to bypass this?" | Whether it is a hub by design or by accretion. |
 | A flag with no reader, a directory with no tests, code nothing calls | "Is this live?" | Dead versus dormant-on-purpose. |
 | A boundary crossed in both directions | "Which direction is legal?" | The intended direction of dependency. |
-| **Nothing in particular** | **Don't ask.** | A question you could have asked before reading the code is a question you haven't earned. It will be answered with something generic, and the generic answer will become a line. |
+| **Nothing in particular** | **Don't ask.** | A question you could have asked before reading the code will be answered with something generic, and the generic answer will become a line. |
 
 A chunk that yields no citable question yields no interview. Mark it skipped and move on.
 
-**"I don't know" must be free.** Every options-question carries a cheap way to say it, and both
-outcomes are useful:
+**"I don't know" is free, and both outcomes are useful:**
 
-- **Nobody knows.** That is itself non-derivable, and it earns a conservative rule — *"Nobody
-  currently knows whether charge replay is idempotent. Treat it as unsafe: never retry a charge
-  without a fresh idempotency key."* That is a trap, and traps are what the layer is for.
-- **Someone else knows.** Park it in `open_questions` with their name and keep going. One unanswered
-  question never blocks a chunk.
+- **Nobody knows.** That is itself non-derivable, and earns a conservative rule — *"Nobody currently
+  knows whether charge replay is idempotent. Treat it as unsafe: never retry a charge without a fresh
+  idempotency key."* That is a trap, and traps are what the layer is for.
+- **Someone else knows** (named in "Other"). Park it in `open_questions` with their name and keep
+  going. One unanswered question never blocks a chunk.
 
-**Grep-verify any answer that names a file, symbol, signature, or flag** before it lands. Memory
-drifts from the code faster than the code drifts from itself. A contradiction gets surfaced to the
-SME, not written down — and it is usually the most interesting thing the chunk produces.
+**Grep-verify any answer that names a file, symbol, signature, or flag** before it lands. A
+contradiction gets surfaced to the SME, not written down — and it is usually the most interesting
+thing the chunk produces.
 
-**Close with the draft, not the transcript.** Show the drafted node — it is short by construction —
-and ask once whether anything is wrong. One revision round, then move on.
+**Close with the draft, not the transcript.** Show the drafted node and ask once whether anything is
+wrong. One revision round, then move on.
 
 ## Rolling up
 
-Parents are captured after their children, from the children's nodes.
+A chunk whose directory has child nodes is drafted from **those nodes and its own direct files, never
+child source.** An agent that reads code re-derives, and re-derived content is precisely what the
+compression pass deletes.
 
-**The parent-drafting agent reads its children's node text and the parent's own direct files. It does
-not read child source.** An agent that reads code re-derives, and re-derived content is precisely
-what the compression pass deletes. An agent that reads children's nodes produces the two things a
-parent is actually for.
-
-A parent earns lines from exactly three sources:
+A parent earns lines from exactly three sources beyond its own direct files:
 
 1. Facts true in two or more children, hoisted out of them.
 2. Facts about the *relationships* between children — call direction, dependency order, "webhooks
    never call payments directly; they enqueue".
 3. Downlinks. Cheap, and most of a parent's value.
 
-**If none of the three produce content, the parent gets no node.** Holes in the hierarchy are
-expected and correct. Without this rule every intermediate directory acquires a node whose content
-is a list of its children, which is an `ls`.
+**If nothing produces content, the parent gets no node.** Holes in the hierarchy are expected and
+correct; otherwise every intermediate directory acquires a node that is an `ls` of its children.
 
-### Deduplicating to the least common ancestor
-
-Any fact the SME states that mentions a path outside the current chunk gets parked with the list of
-paths it applies to. At each tier close, for each parked fact: the LCA is the longest common
-directory prefix of those paths. If that directory has or earns a node, the fact lands there and is
-**removed** from the descendants — not replaced with a pointer.
-
-**Hoisting to the LCA needs no back-link.** An ancestor node already loads whenever a descendant
-does. A child that says "see the parent for the HTTP rule" spends a line telling the reader about
-context they are already holding. Cross-links are for *sideways* references only — between subtrees,
-where the LCA is the root.
-
-**When the LCA is the repo root**, route the fact through the `intent-layer` skill's *Where a rule
-belongs* before adding to the root node. The root always loads, which makes it the most expensive real
-estate in the repo, and three of that table's five destinations are cheaper. It carries one row it
-doesn't, because only a roll-up produces the situation:
-
-| If the fact | Goes to | Because |
-|---|---|---|
-| Genuinely holds everywhere | Root node | That is what a root node is for, and a fact hoisted this far has earned it. |
-
-## Before the code exists
-
-The **greenfield** branch of Phase 0. A node written ahead of its code is the one case where nothing is derivable, so almost everything the
-SME says qualifies. That is also what makes it dangerous: there is no source to check it against.
-
-**Write commitments, not descriptions.**
-
-| Dangles | Holds |
-|---|---|
-| "This directory will own payment retries" | "Everything touching Stripe goes through here — a `stripe` import anywhere else is a bug" |
-
-A description of the future must be re-verified the day the code arrives, and nobody will. A
-commitment is falsified by the code rather than by the node — so when the two diverge, the node is
-right and the code is wrong. Present tense, always: state what is *allowed*, never what *will exist*.
-
-**A boundary the SME cannot state a rule for does not get a directory.** If the only thing true about
-it is its name, there is nothing to write down and the directory is a guess that someone will have to
-delete.
-
-### The four steps
-
-**Do not run `/init`.** There is nothing to initialize from, and a generated root node would look
-authoritative while saying nothing the SME chose.
-
-**G1 — Elicit.** No code, so no evidence-earned questions — the citation table under *The interview*
-is unavailable to you here. Ask what is being built, which boundaries are already intended, and, per
-boundary, the one rule that must hold there.
-
-**G2 — Scaffold.** Create the intended directories and one node each, commitments only, present
-tense, in the variant Phase 0 settled. A boundary with no stated rule gets no directory.
-
-**G3 — Root.** Write the root node from intent alone: what this project is, the boundaries and their
-rules, downlinks to each.
-
-**G4 — Hand off.** Say explicitly that `/init` should be run later, once there is code and tooling to
-describe; it will find these nodes and layer under them.
-
-## Campaign state
-
-A campaign spans sessions, so four things live in
-`~/.claude/intent-layer/capture/<repo-slug>.json` — the slug is `git rev-parse --show-toplevel` with
-`/` and `.` replaced by `-`. The repo root, not the cwd: a resume from a subdirectory, or through a
-symlink like `/tmp` → `/private/tmp`, must land on the same file, and git returns the root with
-symlinks resolved.
-
-1. **The destination**, committed or local. Every other consumer reads it off disk; capture is the
-   only one that can't, because it writes files that don't exist yet.
-2. **The approved chunk map and its order**, each chunk with every path it spans rather than a label.
-   Recomputing it is non-deterministic, and a different chunking mid-campaign silently produces
-   overlapping nodes.
-3. **Chunks deliberately skipped, with the reason.** Without this, resume re-interviews the chunks
-   that correctly earned nothing — forever, punishing the exact behaviour the design wants.
-4. **Parked facts, open questions, and tasks**, which by definition are in no node yet.
-
-Plus the HEAD the campaign started from, so `git diff --name-only <sha>..HEAD` on resume decides
-which boundaries moved enough to need re-chunking.
-
-Kept under `~/.claude` rather than in the repo, following the harvest hook — and for a reason the
-harvest rationale doesn't cover. **State is scaffolding, not product.** A file in the repo listing
-open questions about payments is a second, unmaintained intent layer, and it rots exactly the way the
-doctrine says nodes rot. Anything durable in it belongs in a node.
-
-Keyed by repo rather than by session, deliberately unlike harvest: *harvest state expires by design
-so a finished session stops nagging; campaign state persists by design so a campaign survives session
-death.*
-
-**Close-out empties the file.** Every remaining open question is either routed into a node as a
-conservative rule or handed back to the SME as a task. State that outlives the campaign is state
-nobody will ever read again.
+**Park by what the fact is true of.** A fact *owned* by one chunk that others depend on — B's
+contract, stated while interviewing A — is parked against B; it lands in B's node, and A's node links
+to it. A fact *true of* several paths is parked with those paths, and goes to their least common
+ancestor: the longest common directory prefix. Until the LCA's tier, it rides into that parent's
+pre-read as input. At the LCA's tier close it lands in the LCA's node if the LCA got one, otherwise in
+the nearest ancestor that does, and is **removed** from the descendants — both per `intent-layer` →
+*What goes in a node*, "Never duplicate across nodes". When that node would be the repo root, work down `intent-layer` → *Where a rule belongs*
+first: the root always loads, so it is the most expensive destination in the repo.
