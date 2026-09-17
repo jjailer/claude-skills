@@ -1,5 +1,5 @@
 {
-  "description": "Flag intent-layer nodes whose code changed without them, at commit time",
+  "description": "At git commit: flag intent-layer nodes whose code changed without them, and sessions showing signs of a recurring pitfall",
   "hooks": {
     "PreToolUse": [
       {
