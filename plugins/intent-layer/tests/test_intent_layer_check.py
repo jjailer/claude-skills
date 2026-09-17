@@ -91,15 +91,27 @@ class Repo:
         )
         self.command_exit = proc.returncode
         body = proc.stdout + proc.stderr
-        payload = {"type": "text", "text": body} if response is None else response
         event_body = {
             "hook_event_name": event,
             "tool_name": "Bash",
             "tool_input": {"command": command},
-            "tool_response": payload,
             "cwd": where,
             **fields,
         }
+        # The two events carry the command's output in different fields, and
+        # neither is the shape the docs describe. Captured from real payloads:
+        # PostToolUse has tool_response and no error; PostToolUseFailure has
+        # error and no tool_response at all.
+        if response is not None:
+            event_body["tool_response"] = response
+        elif event == "PostToolUseFailure":
+            event_body["error"] = f"Exit code {proc.returncode}\n{body}"
+            event_body["is_interrupt"] = False
+        else:
+            event_body["tool_response"] = {
+                "stdout": proc.stdout, "stderr": proc.stderr,
+                "interrupted": False, "isImage": False, "noOutputExpected": False,
+            }
         return self.invoke(json.dumps(event_body))
 
     def invoke(self, stdin, *args):
@@ -520,6 +532,30 @@ class PayloadShapeTest(RepoTestCase):
             self.repo.invoke(self.event({"stdout": self.body, "stderr": "", "exit_code": 0})),
             self.SUB,
         )
+
+    def test_the_shape_bash_actually_sends(self):
+        """Captured from a real PostToolUse payload, not from the docs."""
+        self.assertNames(self.repo.invoke(self.event({
+            "stdout": self.body, "stderr": "",
+            "interrupted": False, "isImage": False, "noOutputExpected": False,
+        })), self.SUB)
+
+    def test_the_failure_events_shape_carries_no_tool_response_at_all(self):
+        """PostToolUseFailure keeps the output in `error`, and omits the key.
+
+        Failure mode: the second registration is dead code. Reading only
+        `tool_response` finds nothing, the sha requirement rejects the event,
+        and the `commit && later-failure` case it exists for never fires.
+        """
+        event = json.dumps({
+            "hook_event_name": "PostToolUseFailure",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git commit -m x && exit 13"},
+            "error": f"Exit code 13\n{self.body}",
+            "is_interrupt": False,
+            "cwd": str(self.repo.root),
+        })
+        self.assertNames(self.repo.invoke(event), self.SUB)
 
     def test_absent_tool_response_falls_back_to_head(self):
         """No response at all: the success event still means the commit landed."""

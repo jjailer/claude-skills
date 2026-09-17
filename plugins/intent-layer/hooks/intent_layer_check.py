@@ -33,10 +33,12 @@ is the point — a PreToolUse hook could not tell these apart and advised on
 commits that were about to be rejected).
 
 Registered on both PostToolUse and PostToolUseFailure, because a commit can
-land and the Bash call still exit non-zero (`git commit -m x && npm test`). On
-the failure event a sha is required: without one there is no way to know
-whether the commit or something after it failed, and a missed reminder costs
-far less than a wrong one.
+land and the Bash call still exit non-zero (`git commit -m x && npm test`). The
+two events do not carry the output in the same place — the failure event has no
+`tool_response` at all, only `error` — so both fields are read. On the failure
+event a sha is required: without one there is no way to know whether the commit
+or something after it failed, and a missed reminder costs far less than a wrong
+one.
 
 Merge commits are skipped. The branch's own commits already fired the hook, so
 firing again re-reports work that was already flagged — and `--replay` skips
@@ -293,10 +295,12 @@ def parse_command(command, cwd):
 def response_text(response):
     """Flatten Bash's `tool_response` into text.
 
-    Its exact shape is undocumented, and the field carries the only evidence
-    that a commit happened — so every plausible shape is accepted rather than
-    guessed at. Getting this wrong would not raise; it would make the hook go
-    quietly blind on every commit, which is the worst failure available.
+    Observed for Bash: `{"stdout", "stderr", "interrupted", "isImage",
+    "noOutputExpected"}`, not the `{"type": "text", "text": ...}` the docs
+    describe — which is why every plausible shape is accepted rather than
+    guessed at. `error` arrives as a bare string. Getting this wrong would not
+    raise; it would make the hook go quietly blind on every commit, which is the
+    worst failure available.
     """
     if isinstance(response, (str, list)):
         return _text(response)
@@ -310,6 +314,24 @@ def response_text(response):
     if not parts and response.get("content") is not None:
         parts.append(_text(response["content"]))
     return "\n".join(parts)
+
+
+def command_output(event):
+    """The command's output, from whichever field this event keeps it in.
+
+    Captured from real payloads: PostToolUse carries `tool_response` and no
+    `error`; PostToolUseFailure carries `error` — `"Exit code 13\n<output>"` —
+    and no `tool_response` key at all. Both are read rather than switched on the
+    event name, so a commit's sha is found wherever it lands.
+    """
+    return "\n".join(
+        part
+        for part in (
+            response_text(event.get("tool_response")),
+            response_text(event.get("error")),
+        )
+        if part
+    )
 
 
 def verify(sha, cwd, prefix):
@@ -519,9 +541,9 @@ def session_id(event):
 def transcript_path(event, cwd):
     """Locate this session's transcript, preferring what the event tells us.
 
-    `transcript_path` is documented as common to every hook payload, but no
-    captured PreToolUse payload was available to confirm it, so the derived
-    path is a real fallback rather than defensive padding: Claude Code stores
+    `transcript_path` is present in captured PostToolUse and PostToolUseFailure
+    payloads, so the direct read is the normal path. The derivation stays as a
+    fallback for the payload that omits it: Claude Code stores
     transcripts at ~/.claude/projects/<slug>/<session_id>.jsonl, where the slug
     is the absolute cwd with both "/" and "." replaced by "-".
     """
@@ -911,7 +933,7 @@ def main():
     if not isinstance(event_name, str) or not event_name:
         event_name = "PostToolUse"
     sha = resolve_commit(
-        response_text(event.get("tool_response")),
+        command_output(event),
         commit_cwd,
         prefix,
         succeeded=event_name != "PostToolUseFailure",
