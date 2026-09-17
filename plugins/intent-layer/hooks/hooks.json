@@ -1,7 +1,18 @@
 {
-  "description": "At git commit: flag intent-layer nodes whose code changed without them, and sessions showing signs of a recurring pitfall",
+  "description": "After git commit: flag intent-layer nodes whose code changed without them, and sessions showing signs of a recurring pitfall",
   "hooks": {
-    "PreToolUse": [
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/intent_layer_check.py\""
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
       {
         "matcher": "Bash",
         "hooks": [

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: two commit-time reminders about the intent layer.
+"""PostToolUse hook: two commit-time reminders about the intent layer.
 
 Node section — speaks when a commit touches code under a node it leaves
 untouched. A commit that updates code and its node together is silent.
@@ -17,16 +17,35 @@ cites the evidence. The model that lived the session does the judging — it
 knows what it assumed, which is the whole value and is unrecoverable from a
 transcript alone.
 
-Ordering caveat: a PreToolUse hook that returns additionalContext without a
-permissionDecision does not stop the tool. The model reads this *after* the
-commit runs, which is why both sections point at `--amend`. The same ordering
-means the index is read *before* the command runs, so staging done inside the
-command itself (`git add f && git commit`) has to be predicted from the command.
+Runs *after* the command, which is why both sections point at `--amend`: by the
+time the model reads this the commit exists. That ordering is the whole design.
+Because the commit is a fact rather than a prediction, the files it contains are
+read straight out of git instead of being inferred from the index plus whatever
+the command was about to stage — there is no staging semantics here at all.
+
+Detection is git's own report, not the command. `git commit` prints
+`[main 1a2b3c4] msg`, and that sha is verified to exist before it is used, so
+any shell construct — `$(...)`, `bash -c`, an alias — resolves correctly
+without being understood. Two cases print no sha, and each has an answer:
+`--quiet` (fall back to HEAD, but only on the success event and only if HEAD
+was committed seconds ago) and a commit that never happened (stay silent, which
+is the point — a PreToolUse hook could not tell these apart and advised on
+commits that were about to be rejected).
+
+Registered on both PostToolUse and PostToolUseFailure, because a commit can
+land and the Bash call still exit non-zero (`git commit -m x && npm test`). On
+the failure event a sha is required: without one there is no way to know
+whether the commit or something after it failed, and a missed reminder costs
+far less than a wrong one.
+
+Merge commits are skipped. The branch's own commits already fired the hook, so
+firing again re-reports work that was already flagged — and `--replay` skips
+merges too, which keeps the health check measuring the hook's own rule.
 
 Replay mode — `intent_layer_check.py --replay [N]` — runs the node section's
 resolution over the last N commits on HEAD and prints how often it would have
-fired, for capture's health check. It shares the resolver with the hook, so it
-measures the rule the hook actually applies.
+fired, for capture's health check. It shares the resolver and the file listing
+with the hook, so it measures the rule the hook actually applies.
 """
 
 import glob
@@ -75,6 +94,16 @@ CONVERSATIONAL = frozenset(
 )
 SESSION_ID = re.compile(r"[\w-]+")
 
+# git's commit summary line: `[main 1a2b3c4]`, `[main (root-commit) 1a2b3c4]`,
+# `[detached HEAD 1a2b3c4]`. The branch name and sha are not localized, so this
+# survives any LANG; the hex must sit immediately before the `]`.
+COMMIT_SUMMARY = re.compile(r"^\[[^\]]*?\b([0-9a-f]{7,40})\]", re.MULTILINE)
+# How recently HEAD must have been committed to be believed as "the commit this
+# call just made", when the command printed no sha to confirm it. Generous
+# enough for a slow pre-commit hook, tight enough to reject a commit from
+# earlier in the session.
+HEAD_FRESH_SECONDS = 120
+
 # --- command parsing --------------------------------------------------------
 # git's own global options that consume the following token. Everything else
 # before the subcommand is a flag or carries its value after `=`.
@@ -82,17 +111,6 @@ GIT_GLOBAL_WITH_VALUE = frozenset(
     {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
      "--super-prefix", "--list-cmds"}
 )
-# Short options of `git commit` whose value is the rest of the cluster or the
-# next token — so a message can never be mistaken for `-a`.
-COMMIT_SHORT_WITH_VALUE = frozenset("mFCct")
-# Short options whose value can only be attached (`-S<key>`, `-uno`).
-COMMIT_SHORT_ATTACHED = frozenset("Su")
-COMMIT_LONG_WITH_VALUE = frozenset(
-    {"--message", "--file", "--reuse-message", "--reedit-message", "--fixup",
-     "--squash", "--author", "--date", "--cleanup", "--trailer", "--template",
-     "--pathspec-from-file"}
-)
-ADD_LONG_WITH_VALUE = frozenset({"--pathspec-from-file", "--chmod"})
 
 
 def git(cwd, *args):
@@ -247,13 +265,15 @@ def git_invocation(words, cwd):
 
 
 def parse_command(command, cwd):
-    """The first `git commit` in the command, and the `git add`s that precede it.
+    """The first `git commit` in the command, or None.
 
-    Returns None when the command commits nothing. Each invocation carries the
-    cwd it will actually run in, tracked across `cd`, because relative
-    pathspecs mean nothing without it.
+    Only two things are still wanted from the command: whether it committed at
+    all, and which repo it committed in. What it staged is git's business now.
+
+    The cwd is tracked across `cd` and `-C` because `--git-dir`/`--work-tree`
+    and a relative `-C` mean nothing without it, and the wrong repo resolves
+    the wrong nodes.
     """
-    adds = []
     for words in shell_segments(command):
         stripped = [w for w in words if not re.fullmatch(r"[A-Za-z_]\w*=.*", w, re.DOTALL)]
         if stripped and stripped[0] in ("cd", "pushd"):
@@ -262,123 +282,85 @@ def parse_command(command, cwd):
             cwd = os.path.normpath(os.path.join(cwd, target))
             continue
         invocation = git_invocation(words, cwd)
-        if not invocation:
-            continue
-        subcommand = invocation[0]
-        if subcommand == "add":
-            adds.append(invocation)
-        elif subcommand == "commit":
-            return invocation, adds
+        if invocation and invocation[0] == "commit":
+            return invocation
     return None
 
 
-def split_commit_args(args):
-    """(sweeps tracked files, --include, pathspecs) from `git commit`'s own words.
+# --- which commit the call actually made --------------------------------------
 
-    `-a` is read only from this commit's option tokens: short clusters count
-    (`-am`), but an option's value never does, so neither `-m "fix -all"` nor
-    an `ls -la` earlier in the command sweeps anything in.
+
+def response_text(response):
+    """Flatten Bash's `tool_response` into text.
+
+    Its exact shape is undocumented, and the field carries the only evidence
+    that a commit happened — so every plausible shape is accepted rather than
+    guessed at. Getting this wrong would not raise; it would make the hook go
+    quietly blind on every commit, which is the worst failure available.
     """
-    sweep = include = False
-    paths = []
-    i = 0
-    while i < len(args):
-        word = args[i]
-        i += 1
-        if word == "--":
-            paths.extend(args[i:])
-            break
-        if word.startswith("--"):
-            name, eq, _ = word.partition("=")
-            if name == "--all":
-                sweep = True
-            elif name == "--include":
-                include = True
-            elif name in COMMIT_LONG_WITH_VALUE and not eq:
-                i += 1
-            continue
-        if word.startswith("-") and len(word) > 1:
-            for pos, flag in enumerate(word[1:], start=1):
-                if flag in COMMIT_SHORT_WITH_VALUE:
-                    if pos == len(word) - 1:
-                        i += 1
-                    break
-                if flag in COMMIT_SHORT_ATTACHED:
-                    break
-                if flag == "a":
-                    sweep = True
-                elif flag == "i":
-                    include = True
-            continue
-        paths.append(word)
-    return sweep, include, paths
+    if isinstance(response, (str, list)):
+        return _text(response)
+    if not isinstance(response, dict):
+        return ""
+    parts = []
+    for field in ("text", "output", "stdout", "stderr"):
+        value = response.get(field)
+        if isinstance(value, (str, list)):
+            parts.append(_text(value))
+    if not parts and response.get("content") is not None:
+        parts.append(_text(response["content"]))
+    return "\n".join(parts)
 
 
-def added_paths(invocation, top):
-    """Root-relative paths a `git add` in the same command is about to stage."""
-    _, args, cwd, prefix = invocation
-    everything = update = dry_run = False
-    paths = []
-    i = 0
-    while i < len(args):
-        word = args[i]
-        i += 1
-        if word == "--":
-            paths.extend(args[i:])
-            break
-        if word.startswith("--"):
-            name, eq, _ = word.partition("=")
-            everything |= name == "--all"
-            update |= name == "--update"
-            dry_run |= name == "--dry-run"
-            if name in ADD_LONG_WITH_VALUE and not eq:
-                i += 1
-        elif word.startswith("-") and len(word) > 1:
-            everything |= "A" in word
-            update |= "u" in word
-            dry_run |= "n" in word
-        else:
-            paths.append(word)
-    if dry_run:
-        return set()
-    if paths:
-        kinds = ("-m", "-d") if update and not everything else ("-m", "-d", "-o")
-        return set(git(cwd, *prefix, "ls-files", *kinds, "--exclude-standard",
-                       "--full-name", "--", *paths))
-    found = set()
-    if everything or update:
-        found |= set(git(top, *prefix, "diff", "--name-only"))
-    if everything:
-        found |= set(git(top, *prefix, "ls-files", "-o", "--exclude-standard", "--full-name"))
-    return found
+def verify(sha, cwd, prefix):
+    """The full sha, if it names a commit in this repo. Untrusted input."""
+    lines = git(cwd, *prefix, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}")
+    return lines[0] if lines else None
 
 
-def committed_paths(commit, adds, top):
-    """Root-relative paths the commit will contain, predicted before it runs.
+def is_fresh(sha, cwd, prefix):
+    """Whether this commit was made moments ago.
 
-    The index is only a starting point: PreToolUse fires before the command, so
-    anything staged by the command itself is invisible to `diff --cached`.
-
-    A pathspec commit (`git commit <paths>`, without `--include`) commits
-    exactly those paths and nothing else that is staged, so it replaces the
-    index view rather than adding to it.
+    Guards the no-sha fallback. Without it, a command that merely looked like a
+    commit and quietly did nothing (`git commit -q -m x || true`) would make the
+    hook re-report whatever HEAD already was.
     """
-    _, args, cwd, prefix = commit
-    sweep, include, paths = split_commit_args(args)
-    added = set()
-    for invocation in adds:
-        added |= added_paths(invocation, top)
-    staged = set(git(top, *prefix, "diff", "--cached", "--name-only")) | added
-    if sweep:
-        staged |= set(git(top, *prefix, "diff", "--name-only"))
-    if not paths:
-        return staged
-    named = set(git(cwd, *prefix, "diff", "--cached", "--name-only", "--", *paths))
-    named |= set(git(cwd, *prefix, "diff", "--name-only", "--", *paths))
-    untracked = git(cwd, *prefix, "ls-files", "-o", "--exclude-standard", "--full-name",
-                    "--", *paths)
-    named |= added & set(untracked)
-    return staged | named if include else named
+    stamp = git(cwd, *prefix, "show", "-s", "--format=%ct", sha)
+    try:
+        return abs(time.time() - int(stamp[0])) <= HEAD_FRESH_SECONDS
+    except (IndexError, ValueError):
+        return False
+
+
+def is_merge(sha, cwd, prefix):
+    parents = git(cwd, *prefix, "rev-list", "--parents", "-n", "1", sha)
+    return bool(parents) and len(parents[0].split()) > 2
+
+
+def resolve_commit(text, cwd, prefix, succeeded):
+    """The commit this call made, or None.
+
+    git's reported sha first, because it is true regardless of what the shell
+    did. Only when nothing was printed — `--quiet` — does HEAD stand in, and
+    then only on the success event and only if HEAD is fresh.
+    """
+    for match in COMMIT_SUMMARY.finditer(text or ""):
+        sha = verify(match.group(1), cwd, prefix)
+        if sha:
+            return sha
+    if not succeeded:
+        return None
+    sha = verify("HEAD", cwd, prefix)
+    return sha if sha and is_fresh(sha, cwd, prefix) else None
+
+
+def commit_files(sha, cwd, prefix=()):
+    """Root-relative paths the commit contains.
+
+    Merges are never passed here: `--name-only` prints nothing for them, and
+    both callers skip them deliberately rather than by accident.
+    """
+    return [p for p in git(cwd, *prefix, "show", "--name-only", "--format=", sha) if p]
 
 
 # --- which nodes those files implicate ---------------------------------------
@@ -495,16 +477,19 @@ def render(found, redirect=False):
     for node, files in sorted(found.items()):
         more = f" (+{len(files) - 1} more)" if len(files) > 1 else ""
         lines.append(f"  {node}  <- {files[0]}{more}")
-    # A local node is gitignored, so it can never be in the commit. When every
-    # implicated node is one, say *when* to update it instead of *where*.
-    when = (
-        "before you commit"
+    # The commit already exists by the time this is read, so the instruction has
+    # to be one that is still reachable. Amending folds a committed node into the
+    # commit whose code implicated it, which is the whole point of the section.
+    # A local node is gitignored and no amend will carry it, so for those the
+    # answer is simply to write it while this is still the commit on screen.
+    how = (
+        "now — it is gitignored, so no commit carries it"
         if all(os.path.basename(node) == LOCAL_NODE for node in found)
-        else "in this same commit"
+        else "and fold it in with `git commit --amend --no-edit`"
     )
     lines.append(
         "Did contracts, invariants, traps, the sanctioned choice, or dependencies change? Update "
-        f"or prune the node {when} — or state why it needs no change. Only what a "
+        f"or prune the node {how} — or state why it needs no change. Only what a "
         "model can't re-derive from the code earns a line. Rules: intent-layer skill."
     )
     # A committed node only reaches this list when no local node sits beside it
@@ -854,7 +839,8 @@ def replay(argv):
     """Print how often the node section would have fired over recent history.
 
     Resolved against the nodes that exist *now*, with the hook's own resolver,
-    so the number answers "would the layer as it stands be noisy?". A committed
+    so the number answers "would the layer as it stands be noisy?" — which is
+    why the node set is read at HEAD rather than per commit. A committed
     node is struck by appearing in the commit, exactly as at commit time. A
     local node leaves no trace in history, so it is never struck, and any count
     resting on one is an upper bound — `local_upper_bound` says when that is so.
@@ -872,7 +858,7 @@ def replay(argv):
 
     fired, counts, local = 0, {}, False
     for sha in shas:
-        files = [p for p in git(top, "show", "--name-only", "--format=", sha) if p]
+        files = commit_files(sha, top)
         found = implicated_nodes(files, nodes, top, local_clock=False)
         if found:
             fired += 1
@@ -911,30 +897,43 @@ def main():
     cwd = event.get("cwd")
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
-    parsed = parse_command(command, cwd)
-    if not parsed:
+    commit = parse_command(command, cwd)
+    if not commit:
         return 0
-    commit, adds = parsed
-    prefix = commit[3]
-    top = toplevel(commit[2], prefix)
+    _, _, commit_cwd, prefix = commit
+    top = toplevel(commit_cwd, prefix)
     if not top:
         return 0
 
-    # The two sections are independent. The harvest must be able to speak when
-    # no node is implicated at all — that is the common case for a pitfall
-    # whose home is a hook or a skill rather than a node — and when nothing is
-    # staged, as with `git commit --amend --no-edit` after a session of work.
+    # Echoed rather than hardcoded: this hook is registered on two events, and
+    # naming the wrong one is a silently dropped reminder.
+    event_name = event.get("hook_event_name")
+    if not isinstance(event_name, str) or not event_name:
+        event_name = "PostToolUse"
+    sha = resolve_commit(
+        response_text(event.get("tool_response")),
+        commit_cwd,
+        prefix,
+        succeeded=event_name != "PostToolUseFailure",
+    )
+    if not sha:
+        return 0
+
+    # The two sections are independent, and the harvest must be able to speak
+    # when no node is implicated at all — that is the common case for a pitfall
+    # whose home is a hook or a skill rather than a node. Both wait on a real
+    # commit, though: every instruction below says to fold the result into it.
     harvested = harvest(event, cwd, top)
 
-    changed = committed_paths(commit, adds, top)
     found = {}
-    if changed:
-        changed_nodes = {p for p in changed if os.path.basename(p) == NODE}
-        # Union with staged nodes: a node created by this commit isn't tracked yet.
+    if not is_merge(sha, commit_cwd, prefix):
+        changed = commit_files(sha, commit_cwd, prefix)
+        # The tree at this commit, so node existence agrees with the diff it is
+        # judged against — a node the commit itself added is already in it.
         nodes = {
-            p for p in git(top, *prefix, "ls-files", "--", f"*{NODE}")
+            p for p in git(top, *prefix, "ls-tree", "-r", "--name-only", sha)
             if os.path.basename(p) == NODE
-        } | changed_nodes
+        }
         found = implicated_nodes(changed, nodes, top)
 
     sections = [
@@ -948,7 +947,7 @@ def main():
     json.dump(
         {
             "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
+                "hookEventName": event_name,
                 "additionalContext": message,
             }
         },
