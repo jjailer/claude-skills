@@ -15,7 +15,10 @@ disabled, and one that speaks too little is not noticed at all.
 
 mtimes are set explicitly rather than slept for: the local-node strike test
 compares clocks, and a test that waits on the wall clock is both slow and
-flaky about it.
+flaky about it. The cost of a pinned clock: git's stat cache reads an unchanged
+size and mtime as an unchanged file, so rewriting a path at the same `at=` with
+content of the same length is invisible to `git add`. Give each rewrite its own
+stamp.
 
 Every run gets a throwaway HOME. The hook reads transcripts from and writes
 state under ~/.claude, and a test must never touch the real one.
@@ -443,9 +446,7 @@ class CommitDetectionTest(RepoTestCase):
             ("built from another", f'BASE={parent}\nR=$BASE/{name}\ncd "$R" && {tail}'),
         )):
             with self.subTest(label):
-                # A distinct mtime per step: git's stat cache treats an equal
-                # size and mtime as unchanged, and two of these labels are the
-                # same length, so a shared stamp makes git skip the second edit.
+                # Own stamp per rewrite — see the module docstring on mtimes.
                 self.repo.write("sub/a.py", f"changed {label}\n", at=NEW + step)
                 output = self.repo.run(command, cwd=self.repo.home)
                 # The commit must really land, or silence would be correct.
