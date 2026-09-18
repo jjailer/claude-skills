@@ -150,6 +150,10 @@ def ignores_local_nodes(top, prefix=()):
 # --- which files the commit will contain -------------------------------------
 
 
+# A shell assignment word: `NAME=value`, where value may be empty or multi-line.
+ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=.*", re.DOTALL)
+# `$NAME` or `${NAME}`. Nothing richer — `${NAME:-x}`, `$(...)` — is attempted.
+VARIABLE = re.compile(r"\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))")
 OPERATOR_UNIT = re.compile(r"&>>?|[<>]+[&|]?|&&|\|\||\|&|;;|[;&|()\n]")
 FALLBACK_SPLIT = re.compile(r"(&&|\|\||;|(?<![<>])&(?![<>])|(?<![<>])\|(?![<>])|[()\n])")
 
@@ -234,7 +238,29 @@ def shell_segments(command):
     return segments
 
 
-def git_invocation(words, cwd):
+def expand(word, variables):
+    """`$NAME` and `${NAME}`, from assignments earlier in the command or the env.
+
+    Only for the words that locate the repo — `cd` targets and git's `-C`,
+    `--git-dir`, `--work-tree`. Without it, `R=/path` then `cd "$R"` resolves a
+    directory literally named `$R`, and a commit that landed gets no reminder.
+
+    A variable the hook cannot see is left as written rather than read as empty.
+    The path it names then does not exist and the hook stays quiet; an empty
+    read would silently point somewhere else, and a verified sha from the real
+    repo would simply fail to verify there — quiet either way, but only one of
+    them is honest about why.
+    """
+    def value(match):
+        name = match.group(1) or match.group(2)
+        if name in variables:
+            return variables[name]
+        return os.environ.get(name, match.group(0))
+
+    return os.path.expanduser(VARIABLE.sub(value, word))
+
+
+def git_invocation(words, cwd, variables=None):
     """Parse one simple command as git: (subcommand, args, cwd, prefix) or None.
 
     Global options are walked properly so that `git -C sub commit` is a commit
@@ -242,7 +268,8 @@ def git_invocation(words, cwd):
     `--work-tree` are carried as an absolute prefix for every later git call.
     """
     words = list(words)
-    while words and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", words[0], re.DOTALL):
+    variables = variables or {}
+    while words and ASSIGNMENT.fullmatch(words[0]):
         words.pop(0)
     if not words or os.path.basename(words[0]) != "git":
         return None
@@ -259,9 +286,9 @@ def git_invocation(words, cwd):
             value = words[i + 1]
             i += 1
         if name == "-C":
-            cwd = os.path.join(cwd, os.path.expanduser(value))
+            cwd = os.path.join(cwd, expand(value, variables))
         elif name in ("--git-dir", "--work-tree"):
-            prefix.append(f"{name}={os.path.join(cwd, os.path.expanduser(value))}")
+            prefix.append(f"{name}={os.path.join(cwd, expand(value, variables))}")
         i += 1
     return None
 
@@ -275,15 +302,28 @@ def parse_command(command, cwd):
     The cwd is tracked across `cd` and `-C` because `--git-dir`/`--work-tree`
     and a relative `-C` mean nothing without it, and the wrong repo resolves
     the wrong nodes.
+
+    A segment made only of assignments (optionally after `export`) is recorded,
+    so a later `cd "$R"` can be expanded. An assignment prefixing a command
+    (`R=x cd "$R"`) is not: the shell expands `$R` before that assignment takes
+    effect, so recording it would resolve a directory the shell never visits.
     """
+    variables = {}
     for words in shell_segments(command):
-        stripped = [w for w in words if not re.fullmatch(r"[A-Za-z_]\w*=.*", w, re.DOTALL)]
+        if words and words[0] == "export":
+            words = words[1:]
+        if words and all(ASSIGNMENT.fullmatch(w) for w in words):
+            for word in words:
+                name, _, value = word.partition("=")
+                variables[name] = expand(value, variables)
+            continue
+        stripped = [w for w in words if not ASSIGNMENT.fullmatch(w)]
         if stripped and stripped[0] in ("cd", "pushd"):
             targets = [w for w in stripped[1:] if not w.startswith("-")]
-            target = os.path.expanduser(targets[0]) if targets else os.path.expanduser("~")
+            target = expand(targets[0], variables) if targets else os.path.expanduser("~")
             cwd = os.path.normpath(os.path.join(cwd, target))
             continue
-        invocation = git_invocation(words, cwd)
+        invocation = git_invocation(words, cwd, variables)
         if invocation and invocation[0] == "commit":
             return invocation
     return None

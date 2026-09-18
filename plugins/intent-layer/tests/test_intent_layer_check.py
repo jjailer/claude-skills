@@ -91,6 +91,7 @@ class Repo:
         )
         self.command_exit = proc.returncode
         body = proc.stdout + proc.stderr
+        self.command_output = body
         event_body = {
             "hook_event_name": event,
             "tool_name": "Bash",
@@ -423,6 +424,33 @@ class CommitDetectionTest(RepoTestCase):
         self.repo.write("other/y.py", "changed\n", at=NEW)
         self.repo.commit("main work")
         self.assertSilent(self.repo.run("git merge --no-ff -m merge side"))
+
+    def test_a_repo_named_by_a_variable_is_still_found(self):
+        """`R=<repo>` then `cd "$R"` — a shape Claude writes for scratch repos.
+
+        Failure mode: the parser takes `$R` as a literal directory name, finds
+        no repo there, and a commit that really landed gets no reminder. Run
+        from outside the repo, so only a correct expansion can find it.
+        """
+        root = str(self.repo.root)
+        parent, name = os.path.split(root)
+        tail = "git add sub/a.py && git commit -m x"
+        for step, (label, command) in enumerate((
+            ("quoted, newline", f'R={root}\ncd "$R" && {tail}'),
+            ("braces, semicolon", f"R={root}; cd ${{R}} && {tail}"),
+            ("export", f'export R={root}\ncd "$R" && {tail}'),
+            ("git -C", f'R={root}\ngit -C "$R" add sub/a.py && git -C "$R" commit -m x'),
+            ("built from another", f'BASE={parent}\nR=$BASE/{name}\ncd "$R" && {tail}'),
+        )):
+            with self.subTest(label):
+                # A distinct mtime per step: git's stat cache treats an equal
+                # size and mtime as unchanged, and two of these labels are the
+                # same length, so a shared stamp makes git skip the second edit.
+                self.repo.write("sub/a.py", f"changed {label}\n", at=NEW + step)
+                output = self.repo.run(command, cwd=self.repo.home)
+                # The commit must really land, or silence would be correct.
+                self.assertEqual(self.repo.command_exit, 0, self.repo.command_output)
+                self.assertNames(output, self.SUB)
 
     def test_git_global_options_before_commit_are_still_a_commit(self):
         """`git -C dir commit` has no "git commit" substring at all."""
