@@ -148,10 +148,13 @@ definition of a trap.
   mind" and "Someone else would know"; the real answer arrives typed in "Other". It has no answer set,
   and it is where the highest-value content comes from.
 
-**When an option rests on a doc, recommend it only when the code and that doc agree** — list it first
-with "(Recommended)" in its label. A doc claim that waits on something the code cannot show — a
-migration, a vendor, a date — never agrees: the code standing still proves only that nobody touched
-it. When a doc and the code disagree, recommend nothing — the SME's pick is the finding.
+**Recommend an option only when a doc and the code agree on it** — list it first with "(Recommended)"
+in its label. Nothing else earns the mark: every question here is one the code cannot settle (the
+table's last column), so a hypothesis from code alone is a guess, and marking it hands the SME the
+answer to click. That hypothesis belongs in the opening bullets, where it is corrected rather than
+confirmed. A doc claim that waits on something the code cannot show — a migration, a vendor, a date —
+never agrees: the code standing still proves only that nobody touched it. When a doc and the code
+disagree, recommend nothing — the SME's pick is the finding.
 
 **Earn every question from evidence.** You may only ask about something you can point at. A doc
 citation carries its date: `path (changed YYYY-MM-DD, N chunk commits since)`, from
