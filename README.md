@@ -11,8 +11,8 @@ Personal Claude Code plugins, shared across my projects and with anyone contribu
 >
 > **Nothing updates under you.** An installed plugin stays at the version you fetched until you
 > update it yourself from the `/plugin` menu, so a breaking change here can't reach a machine that
-> hasn't asked for it. If you want a stronger guarantee than "you choose when", fork it — both
-> plugins are small, and a fork you control beats a dependency I might rewrite on a Tuesday.
+> hasn't asked for it. If you want a stronger guarantee than "you choose when", fork it — every
+> plugin here is small, and a fork you control beats a dependency I might rewrite on a Tuesday.
 
 ## Install
 
@@ -20,6 +20,7 @@ Personal Claude Code plugins, shared across my projects and with anyone contribu
 /plugin marketplace add jjailer/claude-skills
 /plugin install intent-layer@jjc-claude-skills
 /plugin install ruff-gate@jjc-claude-skills
+/plugin install permission-log@jjc-claude-skills
 ```
 
 ## Plugins
@@ -68,11 +69,33 @@ checks what the turn touched, never the repo's pre-existing debt. Requires `pyth
 
 Full detail, configuration, and known limits: [`plugins/ruff-gate/README.md`](plugins/ruff-gate/README.md).
 
+### `permission-log`
+
+A tally of your permission prompts. Every time Claude Code asks you to approve a tool call, or auto
+mode blocks one, it appends one JSON line (event, mode, tool, session, directory, and a short
+summary) to a local log, so you can count which calls keep asking and tune your allowlist from data
+instead of memory.
+
+- **Observes only.** It writes nothing to stdout and always exits 0, so it can never answer, deny,
+  or add an error to the prompt it records.
+- **Records where, not what.** Bash commands are redacted (`TOKEN=…`, `Bearer …`) and cut to 300
+  characters. File tools log the path only, and other tools log their input *keys* only.
+- **Counts prompts, not answers.** The event fires before you choose, so approve and deny aren't
+  recorded. Calls approved silently (allow rules, the auto-mode classifier) never prompted and
+  aren't logged; auto-mode denials are, as `PermissionDenied`.
+
+```bash
+jq -r '.tool_name' ~/.claude/plugins/data/permission-log-jjc-claude-skills/permission-log.jsonl | sort | uniq -c | sort -rn
+```
+
+Requires `python3`. Full detail, the log format, and known limits:
+[`plugins/permission-log/README.md`](plugins/permission-log/README.md).
+
 ## What this runs on your machine
 
 Hooks execute on your machine with your permissions, so it's fair to want the list before installing:
 
-- **No network.** Neither plugin makes an HTTP call, sends telemetry, or reports anything anywhere.
+- **No network.** No plugin here makes an HTTP call, sends telemetry, or reports anything anywhere.
   Everything is local `python3` and `git`.
 - **No writes to your repo.** `ruff-gate` never rewrites a file — it prints the `ruff` command that
   would. `intent-layer` only reports; the reminder and the harvest are text, not edits.
@@ -80,6 +103,10 @@ Hooks execute on your machine with your permissions, so it's fair to want the li
   transcript under `~/.claude/projects/` to spot signs of a recurring pitfall, and keeps a small
   per-session state file under `~/.claude` so it speaks once instead of once per commit. That state
   lives outside your repo deliberately, so a harvest can never turn up in `git status`.
+- **It writes a local log of your permission prompts.** `permission-log` appends one line per prompt
+  to a file in its plugin data directory under `~/.claude`: the tool name, session id, working
+  directory, and a redacted summary (a command, a file path, or input keys, never file contents).
+  Nothing leaves your machine, and the file rotates at 5 MB.
 
 ## Backing out
 
@@ -91,7 +118,8 @@ Hooks execute on your machine with your permissions, so it's fair to want the li
 - **Remove the source:** `/plugin marketplace remove jjc-claude-skills`.
 
 Uninstalling takes the hooks with it, and leaves nothing behind in your repos. The only residue is
-the per-session state files under `~/.claude`, which expire on their own.
+the per-session state files under `~/.claude`, which expire on their own, and the `permission-log`
+log, which Claude Code deletes with the plugin's data directory on uninstall.
 
 ## Credit
 

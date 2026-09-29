@@ -1,0 +1,27 @@
+{
+  "description": "Append one JSON line per permission prompt or auto-mode denial; never answer either",
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/permission_log.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/permission_log.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

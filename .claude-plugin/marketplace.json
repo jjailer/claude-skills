@@ -23,6 +23,15 @@
       },
       "source": "./plugins/ruff-gate",
       "category": "development"
+    },
+    {
+      "name": "permission-log",
+      "description": "Logs every permission prompt as one local JSON line — tool, session, directory, and a redacted summary — so you can count which calls keep asking and tune your allowlist. Observes only: it never answers, delays, or denies the prompt.",
+      "author": {
+        "name": "Joseph Jailer-Coley"
+      },
+      "source": "./plugins/permission-log",
+      "category": "development"
     }
   ]
 }
