@@ -93,9 +93,9 @@ The first word is a rough grouping: `cd x && git push` counts as `cd`, and a lea
 - **Redaction is a pattern, not a guarantee.** It catches the shapes listed above. A secret passed
   as a short flag (`-p hunter2`), inside a JSON body, or under a name without one of the trigger
   words goes into the log as written. The log is owner-only, but treat it like shell history.
-- **Registration happens at session start.** `hooks.json` is read once when a session begins, so an
-  install or update needs a restart before it logs anything; edits to the script apply on the next
-  call.
+- **Registration happens at session start.** `hooks.json` is read when a session begins and on
+  `/reload-plugins`, so an install or update logs nothing until one of those; edits to the script
+  apply on the next call.
 - **The installed copy is the last pushed commit.** A marketplace install runs a cached copy of the
   repo as of its last push, not your working tree.
 

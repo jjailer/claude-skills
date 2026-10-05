@@ -128,6 +128,24 @@ The Intent Layer concept originates with **Tyler Brandt at Intent Systems** —
 independent implementation of that idea for Claude Code; any opinion in it that the original doesn't
 hold is mine, not theirs.
 
+## Developing
+
+Keep the released plugins installed, and load your working tree over them for one session:
+
+```bash
+claude --plugin-dir ~/path/to/claude-skills/plugins
+```
+
+Every plugin under `plugins/` loads from disk as `<name>@inline` and replaces the installed copy of
+the same name for that session only; every other session keeps running the release. Hook scripts
+are re-read on each call, and `/reload-plugins` picks up changes to `hooks.json`, skills, and
+manifests. The replacement is silent: `claude plugin list` still shows the marketplace copy as
+enabled, so check `/plugin` for the `@inline` rows. Run `claude plugin validate plugins/<name>`
+before pushing.
+
+Don't `claude plugin marketplace add` a local checkout of this repo — it registers under the same
+`jjc-claude-skills` name and replaces the GitHub marketplace on your machine.
+
 ## Contributing
 
 Issues and PRs are welcome, and I'd rather hear that a hook was noisy than have you disable it

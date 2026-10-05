@@ -2,16 +2,15 @@
 
 ## Traps
 
-- **Registration and code load at different times.** `hooks.json` is read once, at session start;
-  the script is re-read on every call. Changing which events register needs a restart; changing
-  the script does not.
+- **Registration and code load at different times.** `hooks.json` is read at session start and on
+  `/reload-plugins`; the script is re-read on every call. Changing which events register needs a
+  reload; changing the script does not.
 - **The installed copy may not be this tree.** A marketplace install runs a cached copy pinned to
-  the last *pushed* commit. Check `claude plugin list` for which copy is loaded before reasoning
-  about what the hook does.
-- **Plugins collide on name, not id.** A disabled install still holds `intent-layer`, so a working
-  copy symlinked under `~/.claude/skills/` won't load until the marketplace copy is uninstalled.
-  Don't `marketplace add` this repo's path: it carries the same marketplace name and replaces the
-  GitHub entry machine-wide.
+  the last *pushed* commit. Only a session started with `--plugin-dir` runs this tree, and it
+  replaces the installed copy silently — `claude plugin list` still shows the marketplace row
+  enabled. Look for `intent-layer@inline` in `/plugin` before reasoning about what the hook does.
+- **Don't `marketplace add` this repo's path.** It carries the same marketplace name and replaces
+  the GitHub entry machine-wide.
 
 ## Verifying a change
 
