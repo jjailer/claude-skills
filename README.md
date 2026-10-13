@@ -21,6 +21,7 @@ Personal Claude Code plugins, shared across my projects and with anyone contribu
 /plugin install intent-layer@jjc-claude-skills
 /plugin install ruff-gate@jjc-claude-skills
 /plugin install permission-log@jjc-claude-skills
+/plugin install tdd@jjc-claude-skills
 ```
 
 ## Plugins
@@ -90,6 +91,21 @@ jq -r '.tool_name' ~/.claude/plugins/data/permission-log-jjc-claude-skills/permi
 
 Requires `python3`. Full detail, the log format, and known limits:
 [`plugins/permission-log/README.md`](plugins/permission-log/README.md).
+
+### `tdd`
+
+Test-driven development calibrated to risk. Before writing a test, Claude picks a tier: **None**
+(copy, config, presentation), **Regression** (one red test, the default), **Full** (money,
+encryption, persisted data, concurrency, contracts), or **Refactor** (existing tests unedited).
+The red-green-refactor loop then runs at that tier's rigor.
+
+- **`tdd` skill** (`/tdd:tdd`): the tiers, the loop, naming the break a test catches, deriving
+  expected values independently, where to put mocks, and a pre-done mutation check.
+
+A workflow skill in your repo can route each issue type to a tier and link here for everything
+else. No hooks; nothing runs.
+
+Full detail: [`plugins/tdd/README.md`](plugins/tdd/README.md).
 
 ## What this runs on your machine
 

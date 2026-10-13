@@ -32,6 +32,15 @@
       },
       "source": "./plugins/permission-log",
       "category": "development"
+    },
+    {
+      "name": "tdd",
+      "description": "Test-driven development calibrated to risk — pick a rigor tier before writing a test, then run the red-green-refactor loop at that tier: naming the break a test catches, deriving expected values independently, mocking only the slow or external layer, and a pre-done mutation check.",
+      "author": {
+        "name": "Joseph Jailer-Coley"
+      },
+      "source": "./plugins/tdd",
+      "category": "development"
     }
   ]
 }
