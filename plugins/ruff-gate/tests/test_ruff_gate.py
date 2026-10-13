@@ -185,6 +185,23 @@ class SessionScope(GateCase):
         self.lint("mine.py")
         self.assertIn("fix: ruff check --fix mine.py", self.gate()[1])
 
+    def test_a_file_from_an_earlier_passing_turn_does_not_block_a_later_one(self):
+        # a.py went dirty by a route the lint hook never sees (another session,
+        # a Bash sed). That is debt this later turn didn't write.
+        write(self.path("a.py"), CLEAN)
+        self.lint("a.py")
+        self.assertEqual(self.gate(), (0, ""), "fixture must pass its own turn")
+        write(self.path("a.py"), UNUSED_IMPORT)
+        self.assertEqual(self.gate(), (0, ""))
+
+    def test_a_blocked_gate_rechecks_on_the_next_stop_attempt(self):
+        write(self.path("mine.py"), UNUSED_IMPORT)
+        self.lint("mine.py")
+        self.assertEqual(self.gate()[0], 2)
+        code, err = self.gate()
+        self.assertEqual(code, 2, "an unfixed file must keep the turn open")
+        self.assertIn("mine.py", err)
+
     def test_a_deleted_file_does_not_keep_the_turn_open(self):
         write(self.path("gone.py"), UNUSED_IMPORT)
         self.lint("gone.py")

@@ -79,6 +79,9 @@ The touched-file list lives in `${CLAUDE_PLUGIN_DATA}/sessions/<session_id>.json
 working tree it doesn't own. Entries older than seven days are swept, since an abandoned session
 never reaches a Stop.
 
+A passing gate empties the list, so the next turn starts with nothing touched. A blocking gate keeps
+it, so every Stop attempt re-checks the same files until they are clean.
+
 ## Tests
 
 ```bash

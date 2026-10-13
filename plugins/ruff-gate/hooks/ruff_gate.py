@@ -322,6 +322,11 @@ def mode_gate(event, root, cfg, state, complaint):
     gate = gate_tree if cfg.get("scope") == "tree" else gate_session
     scope, sections = gate(root, cfg, state)
     if not sections:
+        # Emptied rather than popped: a state left empty is never saved, and
+        # the stale list on disk would come back next turn. Only a pass clears
+        # it, so a blocked turn is re-checked on every Stop attempt.
+        if state.get("files"):
+            state["files"] = []
         return (2, "ruff-gate: " + complaint) if complaint else (0, "")
 
     lines = [f"ruff violations ({scope}):"]
