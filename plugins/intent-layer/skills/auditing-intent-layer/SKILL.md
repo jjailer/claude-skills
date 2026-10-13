@@ -60,7 +60,7 @@ this table points, it does not restate.**
 
 | Pass | Look for | Rule |
 |---|---|---|
-| **Dangling references** | Every file, symbol, signature, flag, or test the node names, checked against the code as it is now. A reference that no longer resolves sends a reader somewhere that doesn't exist. | `intent-layer` → *Maintenance*, "Prefer claims that can't dangle" |
+| **Dangling references** | Every file, symbol, signature, flag, or test the node names, checked against the code as it is now. A reference that no longer resolves sends a reader somewhere that doesn't exist. That includes each glob on an `<!-- intent-layer: implicated-by … -->` line: one matching no file leaves the hook silent for the files it meant, and a file the node names but the line omits changes without a reminder. | `intent-layer` → *Maintenance*, "Prefer claims that can't dangle" |
 | **Now-derivable lines** | Anything a capable model reading the source would get right on its own. These quietly accumulate: they pass every review because they aren't *wrong*. | `intent-layer` → *Where a rule belongs*, first row |
 | **Narration and tombstones** | Changelog lines, commit SHAs, decision dates, and obituaries for removed symbols. | `intent-layer` → *What goes in a node*, "Invariants, not narration" and "Never leave a tombstone" |
 | **Size** | The `wc -l` passed in. Over ~200 lines, ask whether the excess is a routing problem rather than a writing one. | `intent-layer` → *Compression*, then *Where a rule belongs* for whatever should move out |

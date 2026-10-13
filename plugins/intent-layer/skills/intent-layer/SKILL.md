@@ -137,6 +137,9 @@ nothing.
   survives the rename that would have broken the citation.
 - **Harvest what went wrong.** At the end-of-feature pause, route the session's real pitfalls into the
   right tier — see the `harvesting-pitfalls` skill.
+- **Narrow a conventions node the hook names on nearly every commit** with an `implicated-by` line
+  listing the files it actually governs, including every file it names by path (plugin README →
+  *Narrowing what implicates a node*). Any other file beneath it then implicates nothing.
 - **Audit for drift the commit hook can't see** with the `auditing-intent-layer` skill
   (`/intent-layer:auditing-intent-layer`). The hook only catches code changing under a node. A node
   also rots when something *outside* its directory moves — a shared contract, a dependency's API, a

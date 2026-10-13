@@ -122,7 +122,9 @@ python3 <plugin>/hooks/intent_layer_check.py --replay 30
 
 `rate` is how often the hook will now speak, using the hook's own nearest-node rule, across the whole
 repo even when the campaign was scoped to a path — read `nodes` for the scoped ones. Under about 1 in
-3 is healthy; above it, merge nodes upward before landing. For a local layer the output says
+3 is healthy; above it, merge nodes upward before landing. If the noisy node covers conventions
+rather than every file beneath it, narrow it with an `implicated-by` line instead (plugin README →
+*Narrowing what implicates a node*). For a local layer the output says
 `local_upper_bound` — a local node is struck by the clock, which history can't show — and the
 threshold still applies. Close out campaign state per `references/campaign-state.md`.
 

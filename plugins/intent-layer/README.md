@@ -25,9 +25,13 @@ commands are gone. Use the skills above.
 ## The hook is built to stay quiet
 
 It says nothing when a commit updates code and its node together, nothing when the change sits under
-no node, and nothing about the repo root unless a top-level file changed — a root node nominally sits
-above everything, and a reminder that always fires is one you learn to ignore. Replayed over a
-14-node repo's history it spoke on 2 commits in 8.
+no node, nothing for a file its node's `implicated-by` line leaves out (see *Narrowing what
+implicates a node*), and nothing about the repo root unless a top-level file changed — a root node
+nominally sits above everything, and a reminder that always fires is one you learn to ignore.
+Replayed over a 14-node repo's history it spoke on 2 commits in 8.
+
+A rename counts as both of its paths. A file moved out of a node's directory implicates the node it
+left as well as the one it joined, since the node it left may still name it.
 
 It reads the commit git actually made, never the command that made it. Detection is git's own
 summary line — `[main 1a2b3c4]` — checked against the repo before it is trusted, so files staged in
@@ -60,7 +64,8 @@ python3 plugins/intent-layer/hooks/intent_layer_check.py --replay 30
 # {"commits": 30, "fired": 7, "rate": 0.233, "local_upper_bound": false, "nodes": {...}}
 ```
 
-Capture runs this before it lands and merges nodes upward above roughly 1 in 3.
+Capture runs this before it lands. Above roughly 1 in 3 it merges nodes upward, or narrows one (next
+section).
 
 The pitfall harvest holds the same bar. It needs two independent signals of real friction before it
 speaks, reports each signal once per session rather than once per commit, and gives an explicit cheap
@@ -68,6 +73,40 @@ exit — *iteration is not a pitfall.* Without that exit a review prompt manufac
 justify itself.
 
 Requires `python3` on `PATH`.
+
+## Narrowing what implicates a node
+
+Some nodes cover a subtree's *conventions*, not every file in it. A test suite's node about
+markers, shared fixtures, and driver helpers is the usual case. Every regression test added beneath
+it implicates it, yet a new test rarely makes one of its lines false. That node can list the files
+that do implicate it, on a line of its own anywhere in the node:
+
+```markdown
+<!-- intent-layer: implicated-by conftest.py telenium_helpers.py fixtures/** -->
+```
+
+- **Globs, relative to the node's directory**, whitespace-separated, matched against the rest of
+  the path one segment at a time. Inside a segment, `*`, `?`, and `[…]` are `fnmatch` patterns
+  (case-sensitive) that never cross a `/`. A `**` segment matches zero or more whole directories.
+  So `conftest.py` means only the one beside the node; `**/conftest.py` means every one beneath it,
+  including that one; `fixtures/**` means everything under `fixtures/`. Stray slashes are
+  forgiven: `./x` and `/x` mean `x`, and `dir/` means `dir/**`.
+- **A file the globs don't match implicates nothing.** Not this node, and not an ancestor either:
+  the nearest node owns its subtree, and the declaration says the rest of it isn't intent-layer
+  news. That includes deletions. If the node names a file by path, put that file in the
+  declaration: a rename counts as its old path too, so the reminder then fires.
+- **Absent unless well-formed.** The line must stand alone, so the syntax quoted in prose (in
+  backticks) or inside a fenced code block doesn't count. The first such line wins. If the line is
+  empty or unreadable, the node behaves as if it had no declaration. It never behaves as if no file
+  implicates it.
+- **A `CLAUDE.local.md` beside a `CLAUDE.md`** uses its own declaration if it has one, and its
+  sibling's otherwise.
+- **Read from the working tree**, for `CLAUDE.md` and `CLAUDE.local.md` alike, not from the commit.
+  An unstaged edit to the line already narrows the commit being judged. `--replay` judges history
+  by the declaration as it stands now, so to measure a candidate line, add it and replay.
+
+Don't use it on a node that describes the files beneath it one by one, such as a widget catalogue.
+There every file is the node's business, and narrowing hides real drift.
 
 ## State outside the repo
 

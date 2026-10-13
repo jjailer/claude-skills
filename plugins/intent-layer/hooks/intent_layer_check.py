@@ -2,7 +2,9 @@
 """PostToolUse hook: two commit-time reminders about the intent layer.
 
 Node section — speaks when a commit touches code under a node it leaves
-untouched. A commit that updates code and its node together is silent.
+untouched. A commit that updates code and its node together is silent. A node
+can narrow "code under it" to the files its `implicated-by` line names; any
+other file beneath it then implicates no node at all.
 
 Two node kinds, two ways to be struck. A committed CLAUDE.md is struck by
 appearing in the commit. A gitignored CLAUDE.local.md never can, so it is
@@ -50,6 +52,7 @@ fired, for capture's health check. It shares the resolver and the file listing
 with the hook, so it measures the rule the hook actually applies.
 """
 
+import fnmatch
 import glob
 import json
 import os
@@ -64,6 +67,16 @@ NODE = "CLAUDE.md"
 # directory, and is the node you can act on in a repo whose CLAUDE.md is not
 # yours to change. Local wins a directory holding both, for that reason.
 LOCAL_NODE = "CLAUDE.local.md"
+# A node's own say over which files beneath it implicate it. Anchored to a whole
+# line so that prose quoting the syntax inline (`<!-- ... -->` in backticks)
+# never activates it.
+DECLARATION = re.compile(
+    r"^[ \t]*<!--[ \t]*intent-layer:[ \t]*implicated-by[ \t]+(.*?)[ \t]*-->[ \t]*$",
+    re.MULTILINE,
+)
+# A fenced code block, removed before the search: a node that shows the
+# declaration as an example must not be narrowed by it.
+FENCED = re.compile(r"^[ \t]*(`{3,}|~{3,}).*?^[ \t]*\1[ \t]*$", re.MULTILINE | re.DOTALL)
 
 # --- harvest tuning ---------------------------------------------------------
 # Fire only when this many independent signal families trip. One family alone
@@ -419,10 +432,16 @@ def resolve_commit(text, cwd, prefix, succeeded):
 def commit_files(sha, cwd, prefix=()):
     """Root-relative paths the commit contains.
 
+    `--no-renames` lists a rename as its old path and its new one. With rename
+    detection on, only the new path appears, so moving a file out of a node — or
+    renaming a file a node's declaration names — would never implicate it.
+
     Merges are never passed here: `--name-only` prints nothing for them, and
     both callers skip them deliberately rather than by accident.
     """
-    return [p for p in git(cwd, *prefix, "show", "--name-only", "--format=", sha) if p]
+    return [
+        p for p in git(cwd, *prefix, "show", "--no-renames", "--name-only", "--format=", sha) if p
+    ]
 
 
 # --- which nodes those files implicate ---------------------------------------
@@ -511,16 +530,91 @@ def struck(node, files, changed_nodes, root, local_clock=True):
         return False
 
 
+def pattern_segments(pattern):
+    """A glob as segments, forgiving the slashes a path is often written with.
+
+    `./x` and `/x` mean `x`, and a trailing slash means everything beneath, so
+    `dir/` is `dir/**` — which also matches a file named `dir`, since `**` can
+    span nothing. Read literally, each would match no path and silence the node.
+    """
+    segments = [part for part in pattern.split("/") if part not in ("", ".")]
+    if pattern.endswith("/"):
+        segments.append("**")
+    return segments
+
+
+def read_declaration(path):
+    """Segment lists from the file's first standalone declaration, or None."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            match = DECLARATION.search(FENCED.sub("", handle.read()))
+    except OSError:
+        return None
+    globs = [pattern_segments(p) for p in match.group(1).split()] if match else []
+    return [segments for segments in globs if segments] or None
+
+
+def declared_globs(node, root, cache):
+    """The node's `implicated-by` globs as segment lists, or None if it has none.
+
+    Read from the working tree, like the local-node check, so a committed and a
+    local node are read the same way and `--replay` judges history by the
+    declaration as it stands now. An empty or unreadable declaration is None,
+    not an empty list: "no file implicates this node" would silence it for
+    good, and a typo should not be able to do that.
+
+    A local node without a declaration inherits its sibling CLAUDE.md's. It
+    wins the resolver whenever both exist, so otherwise writing personal notes
+    beside a team node would quietly discard the team's declaration.
+    """
+    if node not in cache:
+        globs = read_declaration(os.path.join(root, node))
+        if globs is None and os.path.basename(node) == LOCAL_NODE:
+            globs = read_declaration(os.path.join(root, os.path.dirname(node), NODE))
+        cache[node] = globs
+    return cache[node]
+
+
+def glob_matches(parts, pattern):
+    """Segment-wise glob: `**` spans zero or more whole segments; any other
+    segment is an fnmatch pattern confined to one segment."""
+    if not pattern:
+        return not parts
+    if pattern[0] == "**":
+        return any(glob_matches(parts[i:], pattern[1:]) for i in range(len(parts) + 1))
+    return (
+        bool(parts)
+        and fnmatch.fnmatchcase(parts[0], pattern[0])
+        and glob_matches(parts[1:], pattern[1:])
+    )
+
+
+def implicates(path, node, root, cache):
+    """Whether `path`, resolved to `node`, implicates it under its declaration.
+
+    A file the declaration excludes implicates nothing, rather than passing up
+    to an ancestor: the nearest node owns its subtree, and the declaration is
+    that node saying the rest of the subtree is not intent-layer news.
+    """
+    globs = declared_globs(node, root, cache)
+    if globs is None:
+        return True
+    directory = os.path.dirname(node)
+    parts = (path[len(directory) + 1:] if directory else path).split("/")
+    return any(glob_matches(parts, pattern) for pattern in globs)
+
+
 def implicated_nodes(changed, nodes, root, local_clock=True):
     """Map each unaccompanied node to the changed files that implicate it."""
     changed_nodes = {p for p in changed if os.path.basename(p) == NODE}
     found = {}
     cache = {}
+    declarations = {}
     for path in sorted(changed):
         if os.path.basename(path) in (NODE, LOCAL_NODE):
             continue
         node = nearest_node(path, nodes, root, cache)
-        if node:
+        if node and implicates(path, node, root, declarations):
             found.setdefault(node, []).append(path)
     # Struck per node against its own files, not against the commit as a whole:
     # a change in a sibling subtree says nothing about whether this node is
@@ -902,7 +996,8 @@ def replay(argv):
 
     Resolved against the nodes that exist *now*, with the hook's own resolver,
     so the number answers "would the layer as it stands be noisy?" — which is
-    why the node set is read at HEAD rather than per commit. A committed
+    why the node set is read at HEAD rather than per commit, and each node's
+    `implicated-by` declaration from the working tree. A committed
     node is struck by appearing in the commit, exactly as at commit time. A
     local node leaves no trace in history, so it is never struck, and any count
     resting on one is an upper bound — `local_upper_bound` says when that is so.

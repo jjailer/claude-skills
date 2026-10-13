@@ -208,6 +208,17 @@ class NodeSectionTest(RepoTestCase):
         self.repo.stage("deep/er/d.py")
         self.assertSilent(self.repo.run())
 
+    def test_a_file_moved_out_of_a_node_implicates_the_node_it_left(self):
+        """A node naming the file now names something that is not there."""
+        self.repo.write("sub/CLAUDE.md", "# sub\n", at=OLD)
+        self.repo.write("other/CLAUDE.md", "# other\n", at=OLD)
+        self.repo.write("sub/m.py", at=OLD)
+        self.repo.commit()
+        self.repo.git("mv", "sub/m.py", "other/m.py")
+        self.assertNames(
+            self.repo.run(), "other/CLAUDE.md  <- other/m.py", "sub/CLAUDE.md  <- sub/m.py"
+        )
+
     def test_committing_from_a_subdirectory_still_resolves_nodes(self):
         """git reports staged paths root-relative but lists files cwd-relative.
 
@@ -334,6 +345,148 @@ class NodeSectionTest(RepoTestCase):
         output = self.repo.run()
         self.assertNames(output, "newdir/CLAUDE.md  <- newdir/n.py")
         self.assertFalse(self.redirected(output))
+
+
+class ImplicatedByTest(RepoTestCase):
+    """A node may declare which files beneath it implicate it.
+
+    Failure mode: a node about a suite's conventions is implicated by every
+    regression test added beneath it, fires on most commits without ever being
+    made false by one, and teaches the reader to ignore the hook.
+    """
+
+    DECLARED = "# suite\n\n<!-- intent-layer: implicated-by conftest.py helpers/** -->\n"
+
+    def setUp(self):
+        super().setUp()
+        self.repo.write("pkg/CLAUDE.md", "# pkg\n", at=OLD)
+        self.repo.write("pkg/tests/CLAUDE.md", self.DECLARED, at=OLD)
+        for rel in ("pkg/tests/conftest.py", "pkg/tests/test_a.py", "pkg/tests/helpers/deep/h.py"):
+            self.repo.write(rel, at=OLD)
+        self.repo.commit()
+
+    def change(self, *rels, at=NEW):
+        for rel in rels:
+            self.repo.write(rel, f"changed {at}\n", at=at)
+        self.repo.stage(*rels)
+        return self.repo.run()
+
+    def declare(self, text):
+        """Rewrite the node in the working tree only, which is where it is read."""
+        self.repo.write("pkg/tests/CLAUDE.md", text, at=OLD)
+
+    def test_renaming_a_declared_file_implicates_the_node(self):
+        """Listed by its new path only, the rename of a named file passes silently."""
+        self.repo.git("mv", "pkg/tests/conftest.py", "pkg/tests/fixtures.py")
+        self.assertNames(self.repo.run(), "pkg/tests/CLAUDE.md  <- pkg/tests/conftest.py")
+
+    def test_a_pattern_written_with_stray_slashes_still_matches(self):
+        """`./x`, `/x`, `x/` and `dir/` would otherwise match nothing and silence the node."""
+        for step, (pattern, rel) in enumerate((
+            ("./conftest.py", "pkg/tests/conftest.py"),
+            ("/conftest.py", "pkg/tests/conftest.py"),
+            ("conftest.py/", "pkg/tests/conftest.py"),
+            ("helpers/", "pkg/tests/helpers/deep/h.py"),
+        )):
+            with self.subTest(pattern=pattern):
+                self.declare(f"<!-- intent-layer: implicated-by {pattern} -->\n")
+                output = self.change(rel, "pkg/tests/test_a.py", at=NEW + step)
+                self.assertNames(output, f"pkg/tests/CLAUDE.md  <- {rel}")
+
+    def test_double_star_also_matches_zero_directories(self):
+        self.declare("<!-- intent-layer: implicated-by **/conftest.py -->\n")
+        self.assertNames(
+            self.change("pkg/tests/conftest.py", "pkg/tests/test_a.py"),
+            "pkg/tests/CLAUDE.md  <- pkg/tests/conftest.py",
+        )
+
+    def test_a_single_star_does_not_cross_a_slash(self):
+        self.declare("<!-- intent-layer: implicated-by *.py -->\n")
+        self.assertSilent(self.change("pkg/tests/helpers/deep/h.py"))
+
+    def test_the_first_declaration_wins(self):
+        self.declare(
+            "<!-- intent-layer: implicated-by conftest.py -->\n"
+            "<!-- intent-layer: implicated-by test_a.py -->\n"
+        )
+        self.assertSilent(self.change("pkg/tests/test_a.py"))
+
+    def test_an_example_in_a_fenced_block_is_not_a_declaration(self):
+        """A node that shows the syntax in a code block must not narrow itself."""
+        self.declare("# suite\n\n```markdown\n<!-- intent-layer: implicated-by keep.py -->\n```\n")
+        self.assertNames(
+            self.change("pkg/tests/test_a.py"), "pkg/tests/CLAUDE.md  <- pkg/tests/test_a.py"
+        )
+
+    def _local_beside_the_committed_node(self, local_text):
+        self.repo.write(".gitignore", "CLAUDE.local.md\n", at=OLD)
+        self.repo.commit()
+        self.repo.write("pkg/tests/CLAUDE.local.md", local_text, at=OLD)
+
+    def test_a_local_node_without_a_declaration_inherits_its_siblings(self):
+        """The local node wins the resolver, which would otherwise discard the committed line."""
+        self._local_beside_the_committed_node("# my notes\n")
+        self.assertSilent(self.change("pkg/tests/test_a.py"))
+
+    def test_a_local_nodes_own_declaration_wins_over_its_siblings(self):
+        self._local_beside_the_committed_node("<!-- intent-layer: implicated-by test_a.py -->\n")
+        self.assertNames(
+            self.change("pkg/tests/test_a.py"), "pkg/tests/CLAUDE.local.md  <- pkg/tests/test_a.py"
+        )
+
+    def test_a_non_matching_file_implicates_no_node_at_all(self):
+        """Neither the declaring node nor pkg/CLAUDE.md above it: the nearest node owns its subtree."""
+        self.assertSilent(self.change("pkg/tests/test_a.py"))
+
+    def test_only_matching_files_implicate_the_declaring_node(self):
+        self.assertNames(
+            self.change("pkg/tests/conftest.py", "pkg/tests/test_a.py"),
+            "pkg/tests/CLAUDE.md  <- pkg/tests/conftest.py",
+        )
+
+    def test_double_star_matches_at_any_depth(self):
+        self.assertNames(
+            self.change("pkg/tests/helpers/deep/h.py", "pkg/tests/test_a.py"),
+            "pkg/tests/CLAUDE.md  <- pkg/tests/helpers/deep/h.py",
+        )
+
+    def test_a_node_without_the_line_is_implicated_by_any_file(self):
+        """Committed beside a declaring node that sorts first, so a declaration
+        cached under the wrong key would narrow this one too."""
+        self.repo.write("src/CLAUDE.md", "# src\n", at=OLD)
+        self.repo.write("src/x.py", at=OLD)
+        self.repo.write("src/sub/y.py", at=OLD)
+        self.repo.commit()
+        self.assertNames(
+            self.change("pkg/tests/conftest.py", "src/x.py", "src/sub/y.py"),
+            "pkg/tests/CLAUDE.md  <- pkg/tests/conftest.py",
+            "src/CLAUDE.md  <- src/sub/y.py (+1 more)",
+        )
+
+    def test_syntax_quoted_inline_is_not_a_declaration(self):
+        """A node that documents the syntax in prose must not narrow itself."""
+        self.repo.write("doc/CLAUDE.md",
+                        "Narrow with `<!-- intent-layer: implicated-by keep.py -->`.\n", at=OLD)
+        self.repo.write("doc/x.py", at=OLD)
+        self.repo.commit()
+        self.assertNames(self.change("doc/x.py"), "doc/CLAUDE.md  <- doc/x.py")
+
+    def test_an_empty_declaration_counts_as_absent(self):
+        """Read as "no file implicates it", a typo would silence the node for good."""
+        self.repo.write("pkg/tests/CLAUDE.md", "# suite\n<!-- intent-layer: implicated-by -->\n",
+                        at=OLD)
+        self.repo.commit()
+        self.assertNames(
+            self.change("pkg/tests/test_a.py"), "pkg/tests/CLAUDE.md  <- pkg/tests/test_a.py"
+        )
+
+    def test_a_local_node_honours_its_declaration(self):
+        self.repo.write(".gitignore", "CLAUDE.local.md\n", at=OLD)
+        self.repo.write("loc/other.py", at=OLD)
+        self.repo.commit()
+        self.repo.write("loc/CLAUDE.local.md", "<!-- intent-layer: implicated-by keep.py -->\n",
+                        at=OLD)
+        self.assertSilent(self.change("loc/other.py"))
 
 
 class CommitDetectionTest(RepoTestCase):
@@ -789,6 +942,19 @@ class ReplayTest(RepoTestCase):
         self.repo.commit()
         result = self.replay()
         self.assertEqual((result["commits"], result["fired"]), (2, 0))
+
+    def test_replay_honours_an_implicated_by_declaration(self):
+        """Otherwise the health check would keep reporting the noise the line removed."""
+        self.repo.write("t/CLAUDE.md", "<!-- intent-layer: implicated-by conftest.py -->\n")
+        self.repo.write("t/conftest.py")
+        self.repo.write("t/test_a.py")
+        self.repo.commit()
+        self.repo.write("t/test_a.py", "two\n")
+        self.repo.commit()
+        self.repo.write("t/conftest.py", "two\n")
+        self.repo.commit()
+        result = self.replay()
+        self.assertEqual((result["fired"], result["nodes"]), (1, {"t/CLAUDE.md": 1}))
 
 
 if __name__ == "__main__":
