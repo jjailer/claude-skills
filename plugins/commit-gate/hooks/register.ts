@@ -114,16 +114,6 @@ export const register: Register = on => {
     return next.called ? next(e) : { deny: `${DENY} (its guard failed)` }
   })
 
-  on('turn.complete', async ($, e, next) => {
-    const answered = await next(e)
-    if (e.agentId !== undefined) return answered
-    const { isApproved } = await read($, approval)
-    const status = isApproved ? undefined : await $.process.run(['git', 'status', '--porcelain']).catch(() => undefined)
-    const isAwaiting = status !== undefined && status.exitCode === 0 && status.stdout.trim() !== ''
-    $.ui.status(isAwaiting ? 'commit-gate: uncommitted changes, awaiting go' : undefined)
-    return answered
-  })
-
   // Approval covers the work the person reviewed. Once a commit has landed, a further edit is
   // new work they have not seen, so the next commit needs a fresh go.
   on('tool.call', async ($, e, next) => {

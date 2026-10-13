@@ -55,12 +55,6 @@ The guard fails closed. If it throws before the commit runs, the commit is refus
 `(its guard failed)` appended to the message; if it throws after, approval is revoked, so the next
 commit needs a fresh go.
 
-## While you're away
-
-At the end of each main-thread turn, if nothing approves a commit and `git status` shows changes,
-the status line reads `commit-gate: uncommitted changes, awaiting go`. Outside a git repo it shows
-nothing.
-
 ## It's a mod
 
 This plugin is a hooks module (`hooks/register.ts`) for Claude Code's function-hook API, not a

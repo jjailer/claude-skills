@@ -120,8 +120,6 @@ commit asks for a fresh go. The review pause stops being something the agent has
   task notices and other sessions' messages never count as you.
 - **A backstop, not a sandbox.** It string-matches `git … commit` in Bash commands. `bash -c`, a
   script or an alias gets past it.
-- **Shows when it's waiting.** The status line reads `awaiting go` while the tree is dirty and
-  nothing approves a commit.
 
 The mod API is early access, so a Claude Code release can break it; `claude plugin test` runs its
 suite against your installed engine. Full detail: [`plugins/commit-gate/README.md`](plugins/commit-gate/README.md).
@@ -152,7 +150,7 @@ Hooks execute on your machine with your permissions, so it's fair to want the li
   and `attention-chime` (which runs `afplay`).
 - **No writes to your repo.** `ruff-gate` never rewrites a file — it prints the `ruff` command that
   would. `intent-layer` only reports; the reminder and the harvest are text, not edits. `commit-gate`
-  only refuses a commit and runs `git status`; its state lives in memory for the session.
+  only refuses a commit; its state lives in memory for the session.
 - **It reads your session transcript.** The `intent-layer` commit hook scans this session's
   transcript under `~/.claude/projects/` to spot signs of a recurring pitfall, and keeps a small
   per-session state file under `~/.claude` so it speaks once instead of once per commit. That state
