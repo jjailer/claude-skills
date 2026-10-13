@@ -22,6 +22,7 @@ Personal Claude Code plugins, shared across my projects and with anyone contribu
 /plugin install ruff-gate@jjc-claude-skills
 /plugin install permission-log@jjc-claude-skills
 /plugin install tdd@jjc-claude-skills
+/plugin install commit-gate@jjc-claude-skills
 ```
 
 ## Plugins
@@ -107,14 +108,32 @@ else. No hooks; nothing runs.
 
 Full detail: [`plugins/tdd/README.md`](plugins/tdd/README.md).
 
+### `commit-gate`
+
+Refuses `git commit` until your latest prompt approves one. A "go", "yes" or "commit it" since your
+last prompt lets commits through. Any later prompt replaces it, and an edit-tool edit after a landed
+commit asks for a fresh go. The review pause stops being something the agent has to remember.
+
+- **Reads the prompt, not the transcript.** It hooks `prompt.submit` and `tool.call` in Claude
+  Code's function-hook (mod) API, so it knows your last words without parsing a file. Background
+  task notices and other sessions' messages never count as you.
+- **A backstop, not a sandbox.** It string-matches `git … commit` in Bash commands. `bash -c`, a
+  script or an alias gets past it.
+- **Shows when it's waiting.** The status line reads `awaiting go` while the tree is dirty and
+  nothing approves a commit.
+
+The mod API is early access, so a Claude Code release can break it; `claude plugin test` runs its
+suite against your installed engine. Full detail: [`plugins/commit-gate/README.md`](plugins/commit-gate/README.md).
+
 ## What this runs on your machine
 
 Hooks execute on your machine with your permissions, so it's fair to want the list before installing:
 
 - **No network.** No plugin here makes an HTTP call, sends telemetry, or reports anything anywhere.
-  Everything is local `python3` and `git`.
+  Everything is local `python3` and `git`, plus `commit-gate`'s in-process hooks module.
 - **No writes to your repo.** `ruff-gate` never rewrites a file — it prints the `ruff` command that
-  would. `intent-layer` only reports; the reminder and the harvest are text, not edits.
+  would. `intent-layer` only reports; the reminder and the harvest are text, not edits. `commit-gate`
+  only refuses a commit and runs `git status`; its state lives in memory for the session.
 - **It reads your session transcript.** The `intent-layer` commit hook scans this session's
   transcript under `~/.claude/projects/` to spot signs of a recurring pitfall, and keeps a small
   per-session state file under `~/.claude` so it speaks once instead of once per commit. That state

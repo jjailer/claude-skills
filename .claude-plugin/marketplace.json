@@ -41,6 +41,15 @@
       },
       "source": "./plugins/tdd",
       "category": "development"
+    },
+    {
+      "name": "commit-gate",
+      "description": "Refuses `git commit` until your latest prompt approves one (\"go\", \"commit it\"), and asks again once work resumes after a commit. Stops the agent committing past a review pause.",
+      "author": {
+        "name": "Joseph Jailer-Coley"
+      },
+      "source": "./plugins/commit-gate",
+      "category": "development"
     }
   ]
 }
