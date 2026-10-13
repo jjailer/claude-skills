@@ -1,7 +1,7 @@
 {
   "name": "commit-gate",
   "description": "Refuses `git commit` until your latest prompt approves one (\"go\", \"commit it\"), and asks again once work resumes after a commit. Stops the agent committing past a review pause.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": {
     "name": "Joseph Jailer-Coley"
   },

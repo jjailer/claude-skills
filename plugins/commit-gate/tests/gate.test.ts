@@ -104,6 +104,9 @@ describe('commit without approval', () => {
       'echo "$(git commit -m x)"',
       'out=$(cd client && git commit -m x)',
       'out=`git commit -m x`',
+      '(git commit)',
+      '(cd client && git commit)',
+      'echo $(echo $(date); git commit)',
     ]) {
       await bash($, cmd)
     }

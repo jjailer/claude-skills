@@ -56,8 +56,9 @@ const SUBSTITUTION = /\$\(([^()]*)\)|`([^`]*)`/g
 const DOUBLE_QUOTED = /"(?:[^"\\]|\\.)*"/g
 
 // Heredoc bodies and quoted strings are data, not commands, so they are blanked before the
-// command line is split into simple commands at `;`, `&&`, `||`, `&`, `|` and newlines. A command
-// substitution runs even inside double quotes, so each one is checked as a command line of its own.
+// command line is split into simple commands at `;`, `&&`, `||`, `&`, `|`, parentheses and
+// newlines. A command substitution runs even inside double quotes, so each one is checked as a
+// command line of its own.
 export function runsGitCommit(command: string): boolean {
   const code = command.replace(HEREDOC_BODY, ' ').replace(SINGLE_QUOTED, "''")
   const substituted = [...code.matchAll(SUBSTITUTION)].map(m => m[1] ?? m[2] ?? '')
@@ -65,9 +66,9 @@ export function runsGitCommit(command: string): boolean {
   return code
     .replace(SUBSTITUTION, "''")
     .replace(DOUBLE_QUOTED, "''")
-    .split(/&&|\|\||[;|&\n]/)
+    .split(/&&|\|\||[;|&()\n]/)
     .some(segment => {
-      const words = segment.trim().replace(/^[({]\s*/, '').split(/\s+/)
+      const words = segment.trim().replace(/^\{\s*/, '').split(/\s+/)
       let i = 0
       while (i < words.length && (PREFIX_WORDS.has(words[i] ?? '') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i] ?? ''))) {
         i++
