@@ -48,30 +48,37 @@ export function approvesCommit(prompt: string): boolean {
 }
 
 const GIT_OPTIONS_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'])
-const PREFIX_COMMANDS = new Set(['env', 'command', 'time', 'nohup', 'exec'])
+// Words a command can sit behind: shell keywords, and commands that run their arguments.
+const PREFIX_WORDS = new Set(['env', 'command', 'time', 'nohup', 'exec', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', '!'])
 const HEREDOC_BODY = /<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?(?:\n[ \t]*\2[ \t]*(?=\n|$)|$)/g
-const QUOTED = /'[^']*'|"(?:[^"\\]|\\.)*"/g
+const SINGLE_QUOTED = /'[^']*'/g
+const SUBSTITUTION = /\$\(([^()]*)\)|`([^`]*)`/g
+const DOUBLE_QUOTED = /"(?:[^"\\]|\\.)*"/g
 
 // Heredoc bodies and quoted strings are data, not commands, so they are blanked before the
-// command line is split into simple commands at `;`, `&&`, `||`, `|` and newlines.
+// command line is split into simple commands at `;`, `&&`, `||`, `&`, `|` and newlines. A command
+// substitution runs even inside double quotes, so each one is checked as a command line of its own.
 export function runsGitCommit(command: string): boolean {
-  const code = command.replace(HEREDOC_BODY, ' ').replace(QUOTED, "''")
-  return code.split(/&&|\|\||[;|\n]/).some(segment => {
-    const words = segment.trim().replace(/^[({]\s*/, '').split(/\s+/)
-    let i = 0
-    while (
-      i < words.length &&
-      (PREFIX_COMMANDS.has(words[i] ?? '') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i] ?? ''))
-    ) {
+  const code = command.replace(HEREDOC_BODY, ' ').replace(SINGLE_QUOTED, "''")
+  const substituted = [...code.matchAll(SUBSTITUTION)].map(m => m[1] ?? m[2] ?? '')
+  if (substituted.some(runsGitCommit)) return true
+  return code
+    .replace(SUBSTITUTION, "''")
+    .replace(DOUBLE_QUOTED, "''")
+    .split(/&&|\|\||[;|&\n]/)
+    .some(segment => {
+      const words = segment.trim().replace(/^[({]\s*/, '').split(/\s+/)
+      let i = 0
+      while (i < words.length && (PREFIX_WORDS.has(words[i] ?? '') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i] ?? ''))) {
+        i++
+      }
+      if (!/(^|\/)git$/.test(words[i] ?? '')) return false
       i++
-    }
-    if (!/(^|\/)git$/.test(words[i] ?? '')) return false
-    i++
-    while (i < words.length && (words[i] ?? '').startsWith('-')) {
-      i += GIT_OPTIONS_WITH_VALUE.has(words[i] ?? '') ? 2 : 1
-    }
-    return words[i] === 'commit'
-  })
+      while (i < words.length && (words[i] ?? '').startsWith('-')) {
+        i += GIT_OPTIONS_WITH_VALUE.has(words[i] ?? '') ? 2 : 1
+      }
+      return words[i] === 'commit'
+    })
 }
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
@@ -99,7 +106,12 @@ export const register: Register = on => {
       await update($, approval, s => ({ ...s, hasCommitted: true }))
     }
     return ran
-  }).catch(($, e, next) => (next.called ? next(e) : { deny: `${DENY} (its guard failed)` }))
+  }).catch(async ($, e, next) => {
+    // A failure after the commit ran may have skipped recording it, which would leave this go
+    // standing for the next commit past an edit that should lapse it.
+    await update($, approval, () => REVOKED).catch(() => undefined)
+    return next.called ? next(e) : { deny: `${DENY} (its guard failed)` }
+  })
 
   on('turn.complete', async ($, e, next) => {
     const answered = await next(e)

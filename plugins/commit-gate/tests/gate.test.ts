@@ -96,6 +96,14 @@ describe('commit without approval', () => {
       '(cd client && git commit -m x)',
       'time git commit -m x',
       'git commit -m "fix: a && b"',
+      'if true; then git commit -m x; fi',
+      'for f in a; do git commit -m x; done',
+      'if git commit -m x; then echo ok; fi',
+      '! git commit -m x',
+      'sleep 1 & git commit -m x',
+      'echo "$(git commit -m x)"',
+      'out=$(cd client && git commit -m x)',
+      'out=`git commit -m x`',
     ]) {
       await bash($, cmd)
     }
@@ -162,6 +170,22 @@ describe('commit with approval', () => {
     expect(w.ran).toEqual(['git commit -m one', 'Edit'])
   })
 
+  // The guard's bookkeeping after a commit can fail; left standing, the go would cover the next
+  // commit too, past the edit that should have lapsed it.
+  test('is revoked when the guard fails after a commit', async ($, on) => {
+    const ran: string[] = []
+    on('tool.call', { tool: 'Bash' }, ($, e) => {
+      if (e.command.endsWith('boom')) throw new Error('engine failed')
+      ran.push(e.command)
+      return { result: { stdout: '', stderr: '', interrupted: false } } as never
+    })
+    on('prompt.submit', ($, e) => ({ text: e.text }))
+    await say($, 'go')
+    await bash($, 'git commit -m boom').catch(() => undefined)
+    await bash($, 'git commit -m x')
+    expect(ran).toEqual([])
+  })
+
   test('is kept across a background task notification', async ($, on) => {
     const w = world(on)
     await say($, 'go')
@@ -198,6 +222,9 @@ describe('commands that are not a commit', () => {
       'cat > notes.txt <<EOF\nthen run:\ngit commit -m x\nEOF',
       "python3 - <<'PY'\nprint('git commit')\ngit commit\nPY",
       'git show HEAD --stat',
+      "echo 'run $(git commit) later'",
+      'git status 2>&1 | head',
+      'echo "$(git log -1)"',
     ]
     for (const cmd of cmds) await bash($, cmd)
     expect(w.ran).toEqual(cmds)

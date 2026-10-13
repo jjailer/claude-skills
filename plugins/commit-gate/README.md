@@ -32,15 +32,17 @@ from the `git add` between two approved commits is guesswork the gate doesn't at
 
 ## What it guards
 
-It recognises `git commit` in a Bash command line: after `cd x &&`, `;`, `|` or `(`, behind env
-assignments (`GIT_AUTHOR_NAME=x git commit`) and `env`, `command`, `time`, `nohup` or `exec`,
-through `git -C <dir>` and `git -c k=v`, and as `/usr/bin/git`. Quoted strings and heredoc bodies
-are data, so `echo "a && git commit"` and a heredoc that mentions `git commit` pass, as do
-`git commit-tree` and `git log --grep commit`.
+It recognises `git commit` in a Bash command line: after `cd x &&`, `;`, `&`, `|` or `(`, behind
+env assignments (`GIT_AUTHOR_NAME=x git commit`) and `env`, `command`, `time`, `nohup` or `exec`,
+after a shell keyword (`then`, `do`, `if`, `!`), inside `$(…)` or backticks, through
+`git -C <dir>` and `git -c k=v`, and as `/usr/bin/git`. Quoted strings and heredoc bodies are data,
+so `echo "a && git commit"`, `echo '$(git commit)'` and a heredoc that mentions `git commit` pass,
+as do `git commit-tree` and `git log --grep commit`.
 
 It is a backstop against slips, not a sandbox. `bash -c "git commit"`, `sh <<EOF` feeding a commit,
-a script that commits, or a git alias all get through. The gate stops the agent from forgetting the
-pause; it doesn't stop an agent that is set on getting around it.
+a script or `xargs` that commits, a git alias, `git "commit"` or `\git commit` all get through. The
+gate stops the agent from forgetting the pause; it doesn't stop an agent that is set on getting
+around it.
 
 When it refuses, the agent reads:
 
@@ -49,8 +51,9 @@ commit-gate: nothing since the last prompt approves a commit. Present the diff a
 then ask for a go.
 ```
 
-The guard fails closed. If it throws, the commit is refused with `(its guard failed)` appended to
-the message.
+The guard fails closed. If it throws before the commit runs, the commit is refused with
+`(its guard failed)` appended to the message; if it throws after, approval is revoked, so the next
+commit needs a fresh go.
 
 ## While you're away
 
