@@ -23,6 +23,7 @@ Personal Claude Code plugins, shared across my projects and with anyone contribu
 /plugin install permission-log@jjc-claude-skills
 /plugin install tdd@jjc-claude-skills
 /plugin install commit-gate@jjc-claude-skills
+/plugin install attention-chime@jjc-claude-skills
 ```
 
 ## Plugins
@@ -125,12 +126,30 @@ commit asks for a fresh go. The review pause stops being something the agent has
 The mod API is early access, so a Claude Code release can break it; `claude plugin test` runs its
 suite against your installed engine. Full detail: [`plugins/commit-gate/README.md`](plugins/commit-gate/README.md).
 
+### `attention-chime`
+
+Plays a sound when Claude needs you, and only then: a bubbly bloop when a decision is waiting (a
+permission prompt, a question, a plan to approve), Siri's soft "got it" when the work you asked for
+is done, and a purr when the context auto-compacts. macOS sounds through `afplay`, and a terminal
+bell where there is no `afplay`.
+
+- **Rings at the real end of a turn.** It hooks the classic `Stop` event in the mod API and waits
+  for the Stop gates beneath it, so a stop that `ruff-gate` or another gate blocks stays silent and
+  the turn's real end rings.
+- **Once per request.** Only your own prompt arms the "done" sound, so a background task finishing
+  later, or another session's message, never rings. Neither does a stop with a subagent or a one-shot
+  wakeup still pending.
+- **Never for subagents, never for idle reminders.** `SubagentStop` and `idle_prompt` are ignored.
+
+Full detail, including how to pick other sounds: [`plugins/attention-chime/README.md`](plugins/attention-chime/README.md).
+
 ## What this runs on your machine
 
 Hooks execute on your machine with your permissions, so it's fair to want the list before installing:
 
 - **No network.** No plugin here makes an HTTP call, sends telemetry, or reports anything anywhere.
-  Everything is local `python3` and `git`, plus `commit-gate`'s in-process hooks module.
+  Everything is local `python3` and `git`, plus the in-process hooks modules of `commit-gate`
+  and `attention-chime` (which runs `afplay`).
 - **No writes to your repo.** `ruff-gate` never rewrites a file — it prints the `ruff` command that
   would. `intent-layer` only reports; the reminder and the harvest are text, not edits. `commit-gate`
   only refuses a commit and runs `git status`; its state lives in memory for the session.

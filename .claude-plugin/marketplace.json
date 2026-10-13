@@ -50,6 +50,15 @@
       },
       "source": "./plugins/commit-gate",
       "category": "development"
+    },
+    {
+      "name": "attention-chime",
+      "description": "A sound when Claude needs a decision from you, another when the work you asked for is done, and a purr on auto-compact. Silent for subagents, stops a gate blocked, idle reminders and turns nobody asked for.",
+      "author": {
+        "name": "Joseph Jailer-Coley"
+      },
+      "source": "./plugins/attention-chime",
+      "category": "productivity"
     }
   ]
 }
