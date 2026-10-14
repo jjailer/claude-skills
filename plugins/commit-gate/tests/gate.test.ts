@@ -23,9 +23,30 @@ async function bash($: Engine, command: string) {
   return $.tool.call({ tool: 'Bash', command } as never)
 }
 
-async function edit($: Engine) {
-  return $.tool.call({ tool: 'Edit', file_path: '/r/a.py', old_string: 'a', new_string: 'b' } as never)
+async function edit($: Engine, file_path = '/r/a.py') {
+  return $.tool.call({ tool: 'Edit', file_path, old_string: 'a', new_string: 'b' } as never)
 }
+
+async function write($: Engine, file_path: string) {
+  return $.tool.call({ tool: 'Write', file_path, content: 'x' } as never)
+}
+
+type Row = { role: 'user' | 'assistant'; text: string; toolUses: never[]; toolResults?: unknown[] }
+
+// The transcript the gate reads at prompt.submit, oldest first.
+function transcript(on: On, rows: Row[]) {
+  on('session.messages', () => ({ value: rows }) as never)
+}
+
+// The agent's last words, which a go answers.
+function lastSaid(on: On, text: string) {
+  transcript(on, [
+    { role: 'user', text: 'make the change', toolUses: [] },
+    { role: 'assistant', text, toolUses: [] },
+  ])
+}
+
+const ASKS_FOR_COMMIT = 'Tests pass. Say go and I\'ll commit it.'
 
 describe('commit without approval', () => {
   test('is denied before any prompt', async ($, on) => {
@@ -209,6 +230,159 @@ describe('commit with approval', () => {
     await say($, 'go, commit', 'peer')
     await bash($, 'git commit -m x')
     expect(w.ran).toEqual([])
+  })
+})
+
+describe('a go answering a commit question', () => {
+  test('approves when the go is its own sentence', async ($, on) => {
+    const w = world(on)
+    lastSaid(on, ASKS_FOR_COMMIT)
+    const texts = ["don't dim for now. go", 'perfect. go', 'nice work. go ahead', 'looks good', 'sounds good, ship it', '👍']
+    for (const text of texts) {
+      await say($, text)
+      await bash($, 'git commit -m x')
+    }
+    expect(w.ran.length).toBe(texts.length)
+  })
+
+  test('approves the phrasings this gate refused in practice', async ($, on) => {
+    const w = world(on)
+    lastSaid(on, 'Both commits are drafted. Reply "go" and I\'ll commit #176.')
+    const texts = ["don't dim for now, go", 'yes, please', 'looks good to me']
+    for (const text of texts) {
+      await say($, text)
+      await bash($, 'git commit -m x')
+    }
+    expect(w.ran.length).toBe(texts.length)
+  })
+
+  test('still denies a reply that asks for other work or says not to commit', async ($, on) => {
+    const w = world(on)
+    lastSaid(on, ASKS_FOR_COMMIT)
+    for (const text of [
+      'yes, investigate why the test fails',
+      "go, but don't commit yet",
+      'rename the variable first',
+      // A yes before more work: the agent would do the work and commit it unseen.
+      'Looks good. Rename the variable first.',
+      'Great. Before you commit, add a changelog entry.',
+      'yes. implement the plan',
+      // Work the commit should wait for, then a yes.
+      'rename the variable first. go',
+      'before committing, bump the version. ok',
+      // A refusal before a yes.
+      'not yet. looks good',
+      'wait. ok',
+      'no! good',
+    ]) {
+      await say($, text)
+      await bash($, 'git commit -m x')
+    }
+    expect(w.ran).toEqual([])
+  })
+
+  test('is not granted by a message that names a commit in passing', async ($, on) => {
+    const w = world(on)
+    let said = ''
+    on('session.messages', () => ({ value: [{ role: 'assistant', text: said, toolUses: [] }] }) as never)
+    for (said of [
+      "Committed 30b0487f. Next I'll start on the rename.",
+      'Committed 30b0487f. Shall I start on the rename?',
+      "Committed 30b0487f. Next I'll go ahead with the rename.",
+      'Changes are not committed yet. Want me to also update the README?',
+      'I looked at commit 30b0487f, which introduced the bug. Want me to fix it?',
+      'Plan: 1. rename X 2. update tests 3. commit. Want me to start?',
+      'I updated plugins/commit-gate/README.md. Want me to bump the version too?',
+    ]) {
+      await say($, 'sure')
+      await bash($, 'git commit -m x')
+    }
+    expect(w.ran).toEqual([])
+  })
+
+  test('reads the question even once the new prompt is in the transcript', async ($, on) => {
+    const w = world(on)
+    transcript(on, [
+      { role: 'assistant', text: ASKS_FOR_COMMIT, toolUses: [] },
+      { role: 'user', text: 'perfect. go', toolUses: [] },
+    ])
+    await say($, 'perfect. go')
+    await bash($, 'git commit -m x')
+    expect(w.ran).toEqual(['git commit -m x'])
+  })
+
+  test('stops at an earlier prompt that already answered the question', async ($, on) => {
+    const w = world(on)
+    transcript(on, [
+      { role: 'assistant', text: ASKS_FOR_COMMIT, toolUses: [] },
+      { role: 'user', text: 'first, rename foo', toolUses: [] },
+      { role: 'assistant', text: '', toolUses: [] },
+      { role: 'user', text: '', toolUses: [], toolResults: [{}] },
+    ])
+    await say($, 'perfect')
+    await bash($, 'git commit -m x')
+    expect(w.ran).toEqual([])
+  })
+
+  test('is not stretched to a go that answered something else', async ($, on) => {
+    const w = world(on)
+    lastSaid(on, 'Here is the plan. Want me to start on it?')
+    for (const text of ["don't dim for now. go", 'looks good']) {
+      await say($, text)
+      await bash($, 'git commit -m x')
+    }
+    expect(w.ran).toEqual([])
+  })
+})
+
+describe('several go-words together', () => {
+  test('approve as the whole answer', async ($, on) => {
+    const w = world(on)
+    const texts = ['ok go', 'yes go ahead', 'lgtm, ship it', 'yep, go']
+    for (const text of texts) {
+      await say($, text)
+      await bash($, 'git commit -m x')
+    }
+    expect(w.ran.length).toBe(texts.length)
+  })
+})
+
+describe('the post-commit lapse', () => {
+  test('ignores a scratch file, such as a commit message written for -F', async ($, on) => {
+    const w = world(on)
+    await say($, 'go, commit both')
+    await bash($, 'git commit -m one')
+    await write($, '/private/tmp/claude-501/scratchpad/msg2.txt')
+    await write($, '/tmp/msg.txt')
+    await bash($, 'git commit -F /private/tmp/claude-501/scratchpad/msg2.txt')
+    expect(w.ran).toEqual([
+      'git commit -m one',
+      'Write',
+      'Write',
+      'git commit -F /private/tmp/claude-501/scratchpad/msg2.txt',
+    ])
+  })
+
+  test('is not dodged by a path that climbs out of a scratch root', async ($, on) => {
+    const w = world(on)
+    await say($, 'go')
+    await bash($, 'git commit -m one')
+    await edit($, '/tmp/../Users/x/repo/a.py')
+    await bash($, 'git commit -m two')
+    expect(w.ran).toEqual(['git commit -m one', 'Edit'])
+  })
+
+  test('says which edit lapsed it, not that nothing approved', async ($, on) => {
+    on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: '', stderr: '', interrupted: false } }) as never)
+    on('tool.call', ($, e) => ({ result: { stdout: '', stderr: '', interrupted: false } }) as never)
+    on('prompt.submit', ($, e) => ({ text: e.text }))
+    await say($, 'go')
+    await bash($, 'git commit -m one')
+    await edit($, '/repo/src/app.py')
+    const res = await bash($, 'git commit -m two')
+    const reason = String(res.deny ?? res.text)
+    expect(reason).toContain('/repo/src/app.py')
+    expect(reason).not.toContain('nothing since the last prompt')
   })
 })
 

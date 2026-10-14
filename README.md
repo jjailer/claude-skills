@@ -112,11 +112,13 @@ Full detail: [`plugins/tdd/README.md`](plugins/tdd/README.md).
 ### `commit-gate`
 
 Refuses `git commit` until your latest prompt approves one. A "go", "yes" or "commit it" since your
-last prompt lets commits through. Any later prompt replaces it, and an edit-tool edit after a landed
-commit asks for a fresh go. The review pause stops being something the agent has to remember.
+last prompt lets commits through, and so does a reply like "looks good. go" when the agent has just
+asked about a commit. Any later prompt replaces it, and an edit-tool edit (outside scratch space)
+after a landed commit asks for a fresh go. The review pause stops being something the agent has to remember.
 
-- **Reads the prompt, not the transcript.** It hooks `prompt.submit` and `tool.call` in Claude
-  Code's function-hook (mod) API, so it knows your last words without parsing a file. Background
+- **Reads your prompt and the question it answers.** It hooks `prompt.submit` and `tool.call` in
+  Claude Code's function-hook (mod) API, and reads the agent's last message through
+  `$.session.messages()`, so it knows what your "go" is answering without parsing a file. Background
   task notices and other sessions' messages never count as you.
 - **A backstop, not a sandbox.** It string-matches `git … commit` in Bash commands. `bash -c`, a
   script or an alias gets past it.
