@@ -47,11 +47,14 @@ const CLAUSE_BREAK = /[.!?;,\n—–]+|\s-\s/
 // ("rename it first. go") outweighs the yes.
 const REFUSAL_CLAUSE = /^(?:no|nope|nah|not yet|not now|wait|hold on|hold off|stop|later|don'?t|do not)$/
 const HOLDS_BACK = /\b(?:first|before)\b/
-// The agent asked about a commit when one sentence of its message names the act ("commit", not
-// "committed" or "commit-gate") and asks for an answer: a go, or a question.
+// The agent asked about a commit when its message's last sentence names the act ("commit", not
+// "committed" or "commit-gate") and asks for an answer: a go, or a question. The agent writes that
+// message, so it must not also announce work still to come ("Next I'll do the rename. Say go and
+// I'll commit both."): a yes would then cover work done after it and committed unseen.
 const SENTENCE_END = /(?<=[.!?])\s+|\n+/
 const NAMES_A_COMMIT = /\bcommit\b(?!-)/i
 const ASKS = /\bgo\b|\?/i
+const WORK_TO_COME = /\b(?:next|then|first|after that),? i'?ll\b|\bi'?ll\b[^.?!\n]*\b(?:first|then)\b/i
 // "commit" as a request (opening a clause, or after and/then/please/can you), not as a noun:
 // "look at the last commit" and "reword the commit message" approve nothing.
 const ASKS_TO_COMMIT =
@@ -77,7 +80,13 @@ export function approvesCommit(prompt: string, agentAsked = ''): boolean {
 }
 
 function askedAboutCommit(agentText: string): boolean {
-  return agentText.split(SENTENCE_END).some(sentence => NAMES_A_COMMIT.test(sentence) && ASKS.test(sentence))
+  const last = agentText
+    .split(SENTENCE_END)
+    .map(sentence => sentence.trim())
+    .filter(sentence => sentence !== '')
+    .at(-1)
+  if (last === undefined || !NAMES_A_COMMIT.test(last) || !ASKS.test(last)) return false
+  return !WORK_TO_COME.test(agentText)
 }
 
 // The text of the agent's most recent message: what the person's prompt is answering. The new
@@ -141,6 +150,28 @@ const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 // Scratch files (a commit message written for `-F`, notes) are not work the person reviews, so
 // editing one doesn't lapse a go. Claude Code's scratchpad sits under these on macOS and Linux.
 const SCRATCH_ROOTS = ['/tmp/', '/private/tmp/', '/var/folders/', '/private/var/folders/']
+
+const isUnderScratch = (path: string) => SCRATCH_ROOTS.some(root => path.startsWith(root))
+
+// Where an edit really lands, every link followed. A file a Write is about to create doesn't exist
+// yet, so its folder is resolved instead. Undefined when neither resolves: the edit then counts as
+// work, never as scratch.
+async function landsAt($: EngineInterface, path: string): Promise<string | undefined> {
+  const real = async (p: string) => (await $.fs.stat(p, { resolve: true }).catch(() => undefined))?.realPath
+  const file = await real(path)
+  if (file !== undefined) return file
+  const slash = path.lastIndexOf('/')
+  const folder = slash > 0 ? await real(path.slice(0, slash)) : undefined
+  return folder === undefined ? undefined : `${folder}${path.slice(slash)}`
+}
+
+// A scratch edit by its spelling and by where it lands: a link under /tmp into a repository, or a
+// path that climbs out with `..`, is work.
+async function isScratchEdit($: EngineInterface, path: string): Promise<boolean> {
+  if (!isUnderScratch(path) || path.split('/').includes('..')) return false
+  const real = await landsAt($, path)
+  return real !== undefined && isUnderScratch(real)
+}
 // What the approval writers' .catch stores: a hook that fails is skipped, which would leave an
 // earlier go standing.
 const REVOKED: CommitApproval = { isApproved: false, hasCommitted: false }
@@ -180,8 +211,8 @@ export const register: Register = on => {
     if (EDIT_TOOLS.has(String(e.tool))) {
       const input = e as { file_path?: unknown; notebook_path?: unknown }
       const path = String(input.file_path ?? input.notebook_path ?? 'a file')
-      const isScratch = SCRATCH_ROOTS.some(root => path.startsWith(root)) && !path.split('/').includes('..')
-      if (!isScratch) {
+      // Only an edit after a commit can lapse the go, so only then is the path resolved.
+      if ((await read($, approval)).hasCommitted && !(await isScratchEdit($, path))) {
         await update($, approval, s => (s.hasCommitted ? { ...REVOKED, lapsedBy: path } : s))
       }
     }

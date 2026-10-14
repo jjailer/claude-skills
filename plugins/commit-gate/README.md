@@ -20,9 +20,13 @@ the conversation it answered.
 | **When the agent has just asked about a commit:** a reply that ends in a yes: `don't dim for now, go`, `perfect. go`, `looks good to me`, `yes, please`, `👍` | Even then, a yes followed by more work (`looks good. rename it first`), a refusal before it (`not yet. looks good`), or work the commit should wait for (`rename it first. go`) |
 
 **What your go answers.** The gate reads the agent's last message (`$.session.messages()`). It
-counts as a commit question when one of its sentences both names the act ("commit", not
+counts as a commit question when its **last** sentence both names the act ("commit", not
 "committed" or "commit-gate") and asks for an answer (a "go", or a question mark): "Reply go and
-I'll commit #176" is one, while "Committed 30b0487f. Shall I start on the rename?" is not. After
+I'll commit #176" is one, while "Committed 30b0487f. Shall I start on the rename?" is not. A message
+that also announces work still to come ("Next I'll do the rename. Say go and I'll commit both.")
+is not one either: the agent writes that message, and a yes to it would cover the rename, done
+after your answer and committed unseen. A pause that puts anything after its question gets only
+the strict rules, so a bare "go" still works there. After
 such a question, your reply is read clause by clause, and it approves when its **last** clause is
 only a yes ("looks good", "perfect", "sure" and "👍" count here, on top of the go-words), no
 earlier clause is a bare refusal ("no", "wait", "not yet"), and none holds the commit back with
@@ -48,9 +52,10 @@ from the `git add` between two approved commits is guesswork the gate doesn't at
 
 Scratch files don't lapse it either: an edit under `/tmp`, `/private/tmp` or `/var/folders` (where
 Claude Code's scratchpad lives) is a commit message for `-F` or a note, not work you review, so two
-commits you approved together can each take a message file. A path that climbs out with `..` isn't
-scratch. A repository checked out under one of those folders gets no lapse at all, so there the gate
-covers only the first commit's pause.
+commits you approved together can each take a message file. The gate checks where the edit really
+lands (`$.fs.stat` with `resolve`; for a file not yet written, its folder), so a link under `/tmp`
+into a repository, or a path that climbs out with `..`, is work. A repository checked out under one
+of those folders gets no lapse at all, so there the gate covers only the first commit's pause.
 
 ## What it guards
 

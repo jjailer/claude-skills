@@ -46,6 +46,22 @@ function lastSaid(on: On, text: string) {
   ])
 }
 
+// A stand-in disk for `$.fs.stat`: `links` maps a directory to where it really lands, and a path in
+// `missing` doesn't exist yet (a file a Write is about to create).
+function disk(on: On, links: Record<string, string>, missing: string[] = []) {
+  const land = (path: string) => {
+    for (const [from, to] of Object.entries(links)) {
+      if (path === from || path.startsWith(`${from}/`)) return to + path.slice(from.length)
+    }
+    return path
+  }
+  on('fs.stat', ($, e) => {
+    const path = String((e as { path: string }).path)
+    const realPath = missing.includes(path) ? undefined : land(path)
+    return { value: { kind: realPath ? 'file' : 'other', size: 0, mtimeMs: 0, isLink: false, realPath } } as never
+  })
+}
+
 const ASKS_FOR_COMMIT = 'Tests pass. Say go and I\'ll commit it.'
 
 describe('commit without approval', () => {
@@ -300,6 +316,23 @@ describe('a go answering a commit question', () => {
     expect(w.ran).toEqual([])
   })
 
+  test('is not granted while the agent still has work to do before the commit', async ($, on) => {
+    const w = world(on)
+    let said = ''
+    on('session.messages', () => ({ value: [{ role: 'assistant', text: said, toolUses: [] }] }) as never)
+    for (said of [
+      "Next I'll do the rename. Say go and I'll commit both.",
+      "Next I'll do the rename.\n\nSay go and I'll commit both.",
+      "I'll fix the typo first. Say go and I'll commit.",
+      // The commit question has to be the message's last word.
+      "Say go and I'll commit it. I also noticed a flaky test worth a look?",
+    ]) {
+      await say($, 'sure')
+      await bash($, 'git commit -m x')
+    }
+    expect(w.ran).toEqual([])
+  })
+
   test('reads the question even once the new prompt is in the transcript', async ($, on) => {
     const w = world(on)
     transcript(on, [
@@ -350,6 +383,7 @@ describe('several go-words together', () => {
 describe('the post-commit lapse', () => {
   test('ignores a scratch file, such as a commit message written for -F', async ($, on) => {
     const w = world(on)
+    disk(on, { '/tmp': '/private/tmp' }, ['/private/tmp/claude-501/scratchpad/msg2.txt', '/tmp/msg.txt'])
     await say($, 'go, commit both')
     await bash($, 'git commit -m one')
     await write($, '/private/tmp/claude-501/scratchpad/msg2.txt')
@@ -361,6 +395,20 @@ describe('the post-commit lapse', () => {
       'Write',
       'git commit -F /private/tmp/claude-501/scratchpad/msg2.txt',
     ])
+  })
+
+  test('is not dodged by a scratch path that links into a repository', async ($, on) => {
+    const w = world(on)
+    disk(on, { '/tmp/link': '/Users/x/repo' }, ['/tmp/link/new.py'])
+    await say($, 'go, commit all three')
+    await bash($, 'git commit -m one')
+    await edit($, '/tmp/link/a.py')
+    await bash($, 'git commit -m two')
+    await say($, 'go, commit all three')
+    await bash($, 'git commit -m three')
+    await write($, '/tmp/link/new.py')
+    await bash($, 'git commit -m four')
+    expect(w.ran).toEqual(['git commit -m one', 'Edit', 'git commit -m three', 'Write'])
   })
 
   test('is not dodged by a path that climbs out of a scratch root', async ($, on) => {
