@@ -1,10 +1,11 @@
 # commit-gate
 
-Refuses `git commit` until your latest prompt approves one.
+Holds `git commit` until you approve it: in your latest prompt, or with one keypress in the dialog
+it opens when your prompt didn't.
 
 A review pause written as prose ("present the diff, then wait for a go") holds until the one time it
 doesn't. Then a commit lands that you never looked at. This gate makes the pause mechanical: the
-agent can do all the work it likes, but a commit needs words from you since your last prompt.
+agent can do all the work it likes, but a commit needs a yes from you since your last prompt.
 
 ## What counts as approval
 
@@ -57,6 +58,28 @@ lands (`$.fs.stat` with `resolve`; for a file not yet written, its folder), so a
 into a repository, or a path that climbs out with `..`, is work. A repository checked out under one
 of those folders gets no lapse at all, so there the gate covers only the first commit's pause.
 
+## When your prompt doesn't approve
+
+The text rules above can't read every way of saying yes ("go, and file both as new issues"). When a
+commit arrives that they didn't approve, the gate doesn't refuse straight away: it asks you itself,
+in Claude Code's own question dialog, showing why it's asking and the commit command:
+
+| You | The commit |
+|---|---|
+| Pick **Not yet** (listed first) | Refused; the agent is told you declined and asks what to change |
+| Pick **Commit** | Runs that one command. It isn't a standing go: the next commit asks again |
+| Type under **Other** | A bare go-word or "commit it" runs it, as Commit does. Anything else is refused and relayed to the agent (it's usually an instruction, like "rename it first") |
+| Press Esc, or no one can answer (`claude -p`) | Refused with the reasons below |
+
+The dialog shows the whole command, since you are approving all of it, whatever follows the commit.
+Commit approves only what it showed: a standing go from it would also cover a retry after a failed
+pre-commit hook, and any edits made in between, unseen.
+
+The dialog is yours alone: the agent can't answer it, so it backs up the text rules without being
+easier to fool. Claude Code answers a question dialog by itself after you've been idle
+(`afkTimeoutMs` on its result); the gate turns that answer into a dismissal, and denies its own
+dialog if that check throws. Not yet comes first, so a reflexive Enter refuses.
+
 ## What it guards
 
 It recognises `git commit` in a Bash command line: after `cd x &&`, `;`, `&`, `|` or `(`, behind
@@ -71,16 +94,22 @@ a script or `xargs` that commits, a git alias, `git "commit"` or `\git commit` a
 gate stops the agent from forgetting the pause; it doesn't stop an agent that is set on getting
 around it.
 
-When it refuses, the agent reads one of two reasons, so it can tell you which:
+When it refuses, the agent reads one of these reasons, so it can tell you which:
 
 ```
 commit-gate: nothing since the last prompt approves a commit. Present the diff and test results,
-then ask for a go.
+then ask for a go. The gate's dialog got no answer (dismissed, or no one to ask).
 ```
 
 ```
 commit-gate: the go lapsed when /repo/src/app.py was edited after the last commit, so this commit
-holds work the person hasn't seen. Present it, then ask for a fresh go.
+holds work the person hasn't seen. Present it, then ask for a fresh go. The gate's dialog got no
+answer (dismissed, or no one to ask).
+```
+
+```
+commit-gate: the person declined this commit in the gate's dialog. Present the diff and test
+results, then ask what to change.
 ```
 
 The guard fails closed. If it throws before the commit runs, the commit is refused with

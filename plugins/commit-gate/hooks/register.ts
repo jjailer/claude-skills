@@ -15,6 +15,33 @@ const DENY =
 const lapsedDeny = (path: string) =>
   `commit-gate: the go lapsed when ${path} was edited after the last commit, so this commit holds ` +
   `work the person hasn't seen. Present it, then ask for a fresh go. ${BACKSTOP}`
+const UNANSWERED = "The gate's dialog got no answer (dismissed, or no one to ask)."
+const DECLINED =
+  "commit-gate: the person declined this commit in the gate's dialog. Present the diff and test " +
+  'results, then ask what to change.'
+const answeredDeny = (text: string) =>
+  `commit-gate: asked whether to commit, the person answered: «${text}». Nothing is committed.`
+
+// When the text rules don't approve, the gate asks the person itself rather than refusing, so a
+// go the regexes miss costs a keypress instead of a round trip. Only the person can answer it.
+// Not yet comes first, so a reflexive Enter, or a dialog that answers itself, picks the refusal.
+const DIALOG_HEADER = 'commit-gate'
+const COMMIT = 'Commit'
+const NOT_YET = 'Not yet'
+
+function dialogQuestion(command: string, lapsedBy: string | undefined): string {
+  const why =
+    lapsedBy === undefined
+      ? 'Nothing since your last prompt approves a commit.'
+      : `${lapsedBy} was edited after the last commit, so the go lapsed.`
+  // Shown whole: the person approves the entire Bash call, whatever follows the commit in it.
+  return `${why}\n\n${command}\n\nRun this commit?`
+}
+
+// Undefined when no one answered: Esc, a `-p` run, or an answer the dialog filled in by itself.
+async function askToCommit($: EngineInterface, question: string): Promise<string | undefined> {
+  return $.ui.ask(question, { header: DIALOG_HEADER, options: [NOT_YET, COMMIT] }).catch(() => undefined)
+}
 
 // Only words the person typed (or pressed, via a plugin submitting asUser) grant or revoke
 // approval. A task notification or a peer's message is not the person: it leaves it as it was.
@@ -192,7 +219,16 @@ export const register: Register = on => {
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     if (!runsGitCommit(e.command)) return next(e)
     const state = await read($, approval)
-    if (!state.isApproved) return { deny: state.lapsedBy === undefined ? DENY : lapsedDeny(state.lapsedBy) }
+    if (!state.isApproved) {
+      const answer = await askToCommit($, dialogQuestion(e.command, state.lapsedBy))
+      if (answer === undefined) {
+        return { deny: `${state.lapsedBy === undefined ? DENY : lapsedDeny(state.lapsedBy)} ${UNANSWERED}` }
+      }
+      if (answer === NOT_YET) return { deny: DECLINED }
+      // A Commit answers the one command the dialog showed, so it runs that call and grants no go.
+      if (answer !== COMMIT && !approvesCommit(answer)) return { deny: answeredDeny(answer) }
+      return next(e)
+    }
     const ran = await next(e)
     if (ran.deny === undefined && ran.isError !== true) {
       await update($, approval, s => ({ ...s, hasCommitted: true }))
@@ -204,6 +240,17 @@ export const register: Register = on => {
     await update($, approval, () => REVOKED).catch(() => undefined)
     return next.called ? next(e) : { deny: `${DENY} (its guard failed)` }
   })
+
+  // The engine answers an AskUserQuestion dialog by itself after the person has been idle a while.
+  // That answer is nobody's approval, so the gate's own dialog is turned into a dismissal.
+  // A throw here would let the engine's answer stand, so the catch denies the gate's own dialog too.
+  const AWAY = { deny: 'commit-gate: the dialog timed out while the person was away' }
+  const isGates = (e: { questions: readonly { header: string }[] }) => e.questions.some(q => q.header === DIALOG_HEADER)
+  on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
+    const ran = await next(e)
+    const wasIdle = typeof ran.result === 'object' && ran.result !== null && 'afkTimeoutMs' in ran.result
+    return isGates(e) && wasIdle ? AWAY : ran
+  }).catch(async ($, e, next) => (isGates(e) ? AWAY : next(e)))
 
   // Approval covers the work the person reviewed. Once a commit has landed, a further edit is
   // new work they have not seen, so the next commit needs a fresh go.

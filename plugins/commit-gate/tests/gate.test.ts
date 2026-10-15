@@ -2,12 +2,22 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-type World = { ran: string[] }
+type World = { ran: string[]; asked: string[] }
 type Kind = 'composer' | 'task-notification' | 'peer' | 'slack-ping'
+// How the person meets the gate's dialog: a label picked or text typed under Other, Esc, or an
+// answer the dialog filled in itself while they were away.
+type Dialog = string | 'dismiss' | { afk: string }
 
-function world(on: On): World {
-  const w: World = { ran: [] }
+function world(on: On, dialog: Dialog = 'dismiss'): World {
+  const w: World = { ran: [], asked: [] }
   on('tool.call', ($, e) => {
+    if (e.tool === 'AskUserQuestion') {
+      const question = String((e as { questions: { question: string }[] }).questions[0]?.question)
+      w.asked.push(question)
+      if (dialog === 'dismiss') return { deny: 'dismissed' } as never
+      const [answer, idle] = typeof dialog === 'string' ? [dialog, {}] : [dialog.afk, { afkTimeoutMs: 60000 }]
+      return { result: { questions: [], answers: { [question]: answer }, ...idle } } as never
+    }
     w.ran.push(e.tool === 'Bash' ? String(e.command) : String(e.tool))
     return { result: { stdout: '', stderr: '', interrupted: false } } as never
   })
@@ -431,6 +441,100 @@ describe('the post-commit lapse', () => {
     const reason = String(res.deny ?? res.text)
     expect(reason).toContain('/repo/src/app.py')
     expect(reason).not.toContain('nothing since the last prompt')
+  })
+})
+
+describe('the dialog when the prompt did not approve', () => {
+  test('runs the commit when the person picks Commit', async ($, on) => {
+    const w = world(on, 'Commit')
+    lastSaid(on, ASKS_FOR_COMMIT)
+    // Replies this gate refused in practice: approval with more said after it.
+    const texts = ['go, and file both as new issues', 'go ahead with both', 'go, and yes to the deployment target commit']
+    for (const text of texts) {
+      await say($, text)
+      await bash($, 'git commit -m x')
+    }
+    expect(w.ran.length).toBe(texts.length)
+    expect(w.asked.length).toBe(texts.length)
+  })
+
+  test('shows the commit it is asking about', async ($, on) => {
+    const w = world(on, 'Commit')
+    await bash($, 'git commit -m "fix: the ticker"')
+    expect(w.asked[0]).toContain('git commit -m "fix: the ticker"')
+  })
+
+  test('refuses when the person picks Not yet', async ($, on) => {
+    const w = world(on, 'Not yet')
+    const res = await bash($, 'git commit -m x')
+    expect(w.ran).toEqual([])
+    expect(w.asked.length).toBe(1)
+    expect(String(res.deny)).toContain('declined')
+  })
+
+  test('relays text typed under Other instead of committing', async ($, on) => {
+    const w = world(on, 'rename it first')
+    const res = await bash($, 'git commit -m x')
+    expect(w.ran).toEqual([])
+    expect(String(res.deny)).toContain('rename it first')
+  })
+
+  test('refuses as before when the dialog is dismissed', async ($, on) => {
+    const w = world(on, 'dismiss')
+    const res = await bash($, 'git commit -m x')
+    expect(w.ran).toEqual([])
+    expect(w.asked.length).toBe(1)
+    expect(String(res.deny)).toContain('nothing since the last prompt approves a commit')
+  })
+
+  // An answer the dialog filled in while the person was away is nobody's approval.
+  test('treats an answer given while the person was away as no answer', async ($, on) => {
+    const w = world(on, { afk: 'Commit' })
+    await bash($, 'git commit -m x')
+    expect(w.asked.length).toBe(1)
+    expect(w.ran).toEqual([])
+  })
+
+  // A Commit answers the command the dialog showed. Left standing, it would cover a retry after a
+  // failed pre-commit hook and the edits made in between, which the person never saw.
+  test('approves only the commit it showed', async ($, on) => {
+    const w = world(on, 'Commit')
+    await bash($, 'git commit -m one')
+    await bash($, 'git commit -m two')
+    expect(w.asked.length).toBe(2)
+    expect(w.ran).toEqual(['git commit -m one', 'git commit -m two'])
+  })
+
+  test('names the edit that lapsed a go', async ($, on) => {
+    const w = world(on, 'Commit')
+    await say($, 'go')
+    await bash($, 'git commit -m one')
+    await edit($, '/repo/src/app.py')
+    await bash($, 'git commit -m two')
+    expect(w.asked.length).toBe(1)
+    expect(w.asked[0]).toContain('/repo/src/app.py')
+  })
+
+  test('shows the whole command, however long', async ($, on) => {
+    const w = world(on, 'Not yet')
+    const command = `git commit -m "${'x'.repeat(300)}" && git push --force`
+    await bash($, command)
+    expect(w.asked[0]).toContain('git push --force')
+  })
+
+  test('takes a go typed under Other', async ($, on) => {
+    const w = world(on, 'go')
+    await bash($, 'git commit -m x')
+    expect(w.ran).toEqual(['git commit -m x'])
+  })
+
+  test("leaves the agent's own questions answered while the person was away alone", async ($, on) => {
+    world(on, { afk: 'Option A' })
+    const res = await $.tool.call({
+      tool: 'AskUserQuestion',
+      questions: [{ question: 'Which?', header: 'Approach', multiSelect: false, options: [{ label: 'Option A', description: '' }, { label: 'Option B', description: '' }] }],
+    } as never)
+    expect(res.deny).toBeUndefined()
   })
 })
 

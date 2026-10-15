@@ -111,10 +111,12 @@ Full detail: [`plugins/tdd/README.md`](plugins/tdd/README.md).
 
 ### `commit-gate`
 
-Refuses `git commit` until your latest prompt approves one. A "go", "yes" or "commit it" since your
-last prompt lets commits through, and so does a reply like "looks good. go" when the agent has just
-asked about a commit. Any later prompt replaces it, and an edit-tool edit (outside scratch space)
-after a landed commit asks for a fresh go. The review pause stops being something the agent has to remember.
+Holds `git commit` until you approve it. A "go", "yes" or "commit it" since your last prompt lets
+commits through, and so does a reply like "looks good. go" when the agent has just asked about a
+commit. Any later prompt replaces it, and an edit-tool edit (outside scratch space) after a landed
+commit asks for a fresh go. When your prompt didn't approve, the gate asks you in a Not yet / Commit
+dialog instead of refusing outright, so a yes it can't parse costs one keypress, not a round trip.
+The review pause stops being something the agent has to remember.
 
 - **Reads your prompt and the question it answers.** It hooks `prompt.submit` and `tool.call` in
   Claude Code's function-hook (mod) API, and reads the agent's last message through
@@ -152,7 +154,7 @@ Hooks execute on your machine with your permissions, so it's fair to want the li
   and `attention-chime` (which runs `afplay`).
 - **No writes to your repo.** `ruff-gate` never rewrites a file — it prints the `ruff` command that
   would. `intent-layer` only reports; the reminder and the harvest are text, not edits. `commit-gate`
-  only refuses a commit; its state lives in memory for the session.
+  only refuses a commit or asks you about one; its state lives in memory for the session.
 - **It reads your session transcript.** The `intent-layer` commit hook scans this session's
   transcript under `~/.claude/projects/` to spot signs of a recurring pitfall, and keeps a small
   per-session state file under `~/.claude` so it speaks once instead of once per commit. That state
