@@ -30,7 +30,7 @@ Artifact.
 The model appends this to the plan file; the skill has the full rules.
 
 ````markdown
-## Explainer
+## Explainer: Render With a Hook
 
 ### Code map
 ```mermaid
@@ -43,6 +43,9 @@ flowchart TD
 #### Render in the page, not in Python
 Chose client-side `marked` over a Python parser: the hook stays *stdlib-only* (nothing to install).
 ````
+
+The name after `Explainer:` titles the page and the Artifact. Leave it off and the title is the
+plan's `#` heading, minus any leading label (`Plan:`, `ui-ux #183:`).
 
 In a `flowchart` or `stateDiagram-v2`, tag nodes with `:::new`, `:::changed`, `:::existing`,
 `:::external` or `:::data`. The page colours them and draws the key under the diagram.

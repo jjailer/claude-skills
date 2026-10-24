@@ -16,10 +16,13 @@ every plan teaches the reader to skim them.
 
 ## Where
 
-Append it to the plan file as the **last** section, under a heading that starts `## Explainer`. The
-renderer takes everything from that heading to the next `#` or `##` heading outside a code fence,
-so use `###` and deeper inside it. Plan mode lets you write only the plan file; the hook does the
-rest when you call ExitPlanMode, and removes the old page if a re-plan drops the section.
+Append it to the plan file as the **last** section, under `## Explainer: <Name>`, where the name
+is two to four words in title case that name the change (`## Explainer: Crash Toggle Row`). The
+name becomes the page's and the Artifact's title; a bare `## Explainer` falls back to a trimmed
+plan heading, which reads as a sentence. The renderer takes everything from that heading to the
+next `#` or `##` heading outside a code fence, so use `###` and deeper inside it. Plan mode lets
+you write only the plan file; the hook does the rest when you call ExitPlanMode, and removes the
+old page if a re-plan drops the section.
 
 ## Shape
 

@@ -27,7 +27,8 @@ import webbrowser
 TEMPLATE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "explainer_template.html"
 )
-EXPLAINER_HEADING = re.compile(r"^## Explainer\b")
+# "## Explainer: Crash Toggle Row" names the page; a bare "## Explainer" falls back to the plan's heading.
+EXPLAINER_HEADING = re.compile(r"^## Explainer\b(?::\s*(.*\S))?")
 SECTION_END = re.compile(r"^#{1,2} ")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 PLAN_TITLE = re.compile(r"^# (.+)$", re.MULTILINE)
@@ -43,12 +44,20 @@ FALLBACK_TITLE = "Plan Explainer"
 
 
 def extract_explainer(plan):
-    """The `## Explainer` section up to the next `#` or `##` heading, both outside fences."""
+    return explainer_section(plan)[1]
+
+
+def explainer_section(plan):
+    """(name, text) of the `## Explainer` section, up to the next `#` or `##` heading, both
+    outside fences; text is None when there is no section, name None when the heading is bare."""
+    name = None
     body = None
     fence = None  # (marker character, length) of the open fence
     for line in plan.replace("\r\n", "\n").split("\n"):
         if fence is None:
-            if body is None and EXPLAINER_HEADING.match(line):
+            heading = EXPLAINER_HEADING.match(line) if body is None else None
+            if heading:
+                name = heading.group(1) or None
                 body = []
                 continue
             if body is not None and SECTION_END.match(line):
@@ -63,7 +72,7 @@ def extract_explainer(plan):
             elif marker[0] == fence[0] and len(marker) >= fence[1] and not rest.strip():
                 fence = None
     text = "\n".join(body).strip() if body is not None else ""
-    return text or None
+    return name, text or None
 
 
 def plan_heading(plan):
@@ -96,12 +105,12 @@ def embed_json(text):
     )
 
 
-def render_fragment(plan, explainer):
+def render_fragment(plan, explainer, name=None):
     heading = plan_heading(plan)
     with open(TEMPLATE, encoding="utf-8") as fh:
         template = fh.read()
     return (
-        template.replace("{{TITLE}}", html.escape(page_title(heading)))
+        template.replace("{{TITLE}}", html.escape(name or page_title(heading)))
         .replace("{{HEADING}}", html.escape(heading))
         .replace("{{SOURCE_JSON}}", embed_json(explainer))
     )
@@ -136,7 +145,7 @@ def main():
     if not plan or not plan_file_path:
         return 0
 
-    explainer = extract_explainer(plan)
+    name, explainer = explainer_section(plan)
     if explainer is None:
         # A re-plan that dropped its explainer must not leave the old page to be published.
         for path in output_paths(plan_file_path):
@@ -150,7 +159,7 @@ def main():
         return 0
 
     try:
-        fragment = render_fragment(plan, explainer)
+        fragment = render_fragment(plan, explainer, name)
         local_path, artifact_path = output_paths(plan_file_path)
         write(local_path, DOCUMENT_HEAD + fragment)
         write(artifact_path, fragment)

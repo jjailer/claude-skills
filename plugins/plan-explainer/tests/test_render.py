@@ -169,6 +169,10 @@ class ExplainerExtraction(unittest.TestCase):
         plan = "# P\r\n\r\n## Explainer\r\nbody\r\n\r\n## Verification\r\nRun it.\r\n"
         self.assertEqual(render.extract_explainer(plan), "body")
 
+    def test_any_heading_that_starts_with_explainer_opens_the_section(self):
+        plan = "# P\n\n## Explainer (draft)\nbody\n"
+        self.assertEqual(render.extract_explainer(plan), "body")
+
     def test_a_trailing_level_one_heading_ends_the_section(self):
         plan = "# P\n\n## Explainer\nbody\n\n# Appendix\nnot explainer\n"
         self.assertEqual(render.extract_explainer(plan), "body")
@@ -181,6 +185,28 @@ class PageTitle(unittest.TestCase):
         for heading, expected in TITLE_CASES.items():
             with self.subTest(heading=heading):
                 self.assertEqual(render.page_title(heading), expected)
+
+
+class NamedExplainer(HookCase):
+    """A heading-derived title can only trim: "ui-ux #183: the crash-reporting switch is
+    hard to engage" became "the crash-reporting switch is hard to engage"."""
+
+    def page_title_for(self, plan):
+        self.exit_plan_mode(plan, self.plan_path)
+        with open(os.path.join(self.plans, "eager-bubble.artifact.html")) as fh:
+            return re.search(r"<title>(.*?)</title>", fh.read()).group(1)
+
+    def test_a_name_on_the_explainer_heading_titles_the_page(self):
+        plan = "# ui-ux #183: the switch is hard to engage\n\n## Explainer: Crash Toggle Row\nbody\n"
+        self.assertEqual(self.page_title_for(plan), "Crash Toggle Row")
+
+    def test_a_bare_explainer_heading_falls_back_to_the_plan_heading(self):
+        plan = "# Plan: Fix the login timeout\n\n## Explainer\nbody\n"
+        self.assertEqual(self.page_title_for(plan), "Fix the login timeout")
+
+    def test_the_name_is_escaped_like_any_other_title(self):
+        plan = "# P\n\n## Explainer: Tags & <b>\nbody\n"
+        self.assertEqual(self.page_title_for(plan), "Tags &amp; &lt;b&gt;")
 
 
 class Outputs(HookCase):
