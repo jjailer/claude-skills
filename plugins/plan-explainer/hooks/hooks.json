@@ -1,0 +1,17 @@
+{
+  "description": "Render a plan's Explainer section to HTML when the plan goes up for approval",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/render.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

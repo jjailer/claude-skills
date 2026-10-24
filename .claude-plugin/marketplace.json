@@ -59,6 +59,15 @@
       },
       "source": "./plugins/attention-chime",
       "category": "productivity"
+    },
+    {
+      "name": "plan-explainer",
+      "description": "A teaching companion for plan mode — an Explainer appendix that walks the relevant code and design decisions with keyed Mermaid diagrams, rendered to a dark-mode-legible page when the plan goes up for approval and published as an Artifact after.",
+      "author": {
+        "name": "Joseph Jailer-Coley"
+      },
+      "source": "./plugins/plan-explainer",
+      "category": "documentation"
     }
   ]
 }

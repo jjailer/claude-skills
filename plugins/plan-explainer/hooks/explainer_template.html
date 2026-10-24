@@ -1,0 +1,313 @@
+<title>{{TITLE}}</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+  /* Layout: one reading column; diagrams, tables and code may run wider inside their own scrollers.
+     Every colour below was checked at WCAG AA in both themes: text 4.5:1, lines and strokes 3:1. */
+  :root {
+    --bg: #f7f8fa; --surface: #ffffff; --fg: #1b1f27; --muted: #596273; --rule: #d9dde4;
+    --accent: #3949ab; --code-bg: #eef1f5;
+    --dg-node: #eef1f6; --dg-node-fg: #1b1f27; --dg-border: #7d8799; --dg-line: #596273;
+    --dg-note: #fff6d6; --dg-note-fg: #3d2a00;
+    --role-new-fill: #dcf5e3; --role-new-stroke: #1a7f37; --role-new-fg: #0f3d1c;
+    --role-changed-fill: #fff0c2; --role-changed-stroke: #9a6700; --role-changed-fg: #3d2a00;
+    --role-existing-fill: #eef1f6; --role-existing-stroke: #7d8799; --role-existing-fg: #1b1f27;
+    --role-external-fill: #ece4ff; --role-external-stroke: #7048c8; --role-external-fg: #2e1065;
+    --role-data-fill: #dbeefe; --role-data-stroke: #0969da; --role-data-fg: #0a2540;
+    --tk-keyword: #8f2f9c; --tk-string: #0b6e3a; --tk-comment: #5f6876; --tk-number: #9a4f00;
+    --tk-title: #1f5fb8; --tk-attr: #7f5300; --tk-builtin: #0e6e7c;
+    --font-body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1218; --surface: #161a22; --fg: #e4e8ef; --muted: #9aa4b5; --rule: #2a303c;
+      --accent: #9fa8ff; --code-bg: #12161d;
+      --dg-node: #1d2330; --dg-node-fg: #e4e8ef; --dg-border: #6b768a; --dg-line: #9aa4b5;
+      --dg-note: #3a3010; --dg-note-fg: #fbe9b5;
+      --role-new-fill: #133a22; --role-new-stroke: #3fb950; --role-new-fg: #d7f5df;
+      --role-changed-fill: #3d2e05; --role-changed-stroke: #d29922; --role-changed-fg: #fbe9b5;
+      --role-existing-fill: #1d2330; --role-existing-stroke: #6b768a; --role-existing-fg: #e4e8ef;
+      --role-external-fill: #2b2142; --role-external-stroke: #a78bfa; --role-external-fg: #ede4ff;
+      --role-data-fill: #0f2c47; --role-data-stroke: #58a6ff; --role-data-fg: #dbeefe;
+      --tk-keyword: #e39cf0; --tk-string: #8fd9a8; --tk-comment: #8b95a7; --tk-number: #f0b46c;
+      --tk-title: #8cb8ff; --tk-attr: #e8c47a; --tk-builtin: #7fd3df;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1218; --surface: #161a22; --fg: #e4e8ef; --muted: #9aa4b5; --rule: #2a303c;
+    --accent: #9fa8ff; --code-bg: #12161d;
+    --dg-node: #1d2330; --dg-node-fg: #e4e8ef; --dg-border: #6b768a; --dg-line: #9aa4b5;
+    --dg-note: #3a3010; --dg-note-fg: #fbe9b5;
+    --role-new-fill: #133a22; --role-new-stroke: #3fb950; --role-new-fg: #d7f5df;
+    --role-changed-fill: #3d2e05; --role-changed-stroke: #d29922; --role-changed-fg: #fbe9b5;
+    --role-existing-fill: #1d2330; --role-existing-stroke: #6b768a; --role-existing-fg: #e4e8ef;
+    --role-external-fill: #2b2142; --role-external-stroke: #a78bfa; --role-external-fg: #ede4ff;
+    --role-data-fill: #0f2c47; --role-data-stroke: #58a6ff; --role-data-fg: #dbeefe;
+    --tk-keyword: #e39cf0; --tk-string: #8fd9a8; --tk-comment: #8b95a7; --tk-number: #f0b46c;
+    --tk-title: #8cb8ff; --tk-attr: #e8c47a; --tk-builtin: #7fd3df;
+    color-scheme: dark;
+  }
+
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 400 1rem/1.65 var(--font-body);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 2.5rem 4rem;
+  }
+  .page { max-width: 46rem; margin-inline: auto; display: grid; gap: 1.75rem; }
+  .page > * { min-width: 0; }
+
+  header { display: grid; gap: 0.35rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--rule); }
+  .eyebrow {
+    font: 500 0.75rem/1 var(--font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  h1 { margin: 0; font-size: 1.85rem; line-height: 1.2; font-weight: 600; text-wrap: balance; }
+
+  #explainer { display: grid; gap: 1rem; }
+  #explainer > * { min-width: 0; margin: 0; }
+  #explainer h1, #explainer h2, #explainer h3 {
+    font-size: 1.3rem; line-height: 1.3; font-weight: 600; text-wrap: balance;
+    margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--rule);
+  }
+  #explainer > :is(h1, h2, h3):first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+  #explainer h4 { font-size: 1.05rem; font-weight: 600; margin-top: 0.75rem; }
+  #explainer p, #explainer li { max-width: 68ch; }
+  #explainer ul, #explainer ol { padding-left: 1.35rem; display: grid; gap: 0.3rem; }
+  #explainer a { color: var(--accent); text-underline-offset: 0.15em; }
+  #explainer a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+  #explainer strong { font-weight: 600; }
+  #explainer blockquote {
+    border-left: 3px solid var(--accent); padding: 0.25rem 0 0.25rem 1rem; color: var(--muted);
+  }
+
+  code { font-family: var(--font-mono); font-size: 0.9em; }
+  :not(pre) > code {
+    background: var(--code-bg); border: 1px solid var(--rule); border-radius: 4px;
+    padding: 0.05em 0.35em; overflow-wrap: anywhere;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 0.9rem 1rem; overflow-x: auto; font-size: 0.9rem; line-height: 1.55;
+  }
+  pre code { font-size: inherit; color: var(--fg); background: none; }
+  .hljs-keyword, .hljs-selector-tag, .hljs-meta .hljs-keyword, .hljs-doctag { color: var(--tk-keyword); }
+  .hljs-string, .hljs-regexp, .hljs-addition, .hljs-meta .hljs-string { color: var(--tk-string); }
+  .hljs-comment, .hljs-quote, .hljs-deletion { color: var(--tk-comment); font-style: italic; }
+  .hljs-number, .hljs-literal, .hljs-symbol, .hljs-bullet { color: var(--tk-number); }
+  .hljs-title, .hljs-section, .hljs-name, .hljs-title.function_ { color: var(--tk-title); }
+  .hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable, .hljs-property { color: var(--tk-attr); }
+  .hljs-built_in, .hljs-type, .hljs-params, .hljs-meta { color: var(--tk-builtin); }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+  th, td { text-align: left; vertical-align: top; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--rule); }
+  tr:last-child td { border-bottom: 0; }
+  th { font-weight: 600; color: var(--muted); font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; }
+
+  figure.diagram {
+    margin: 0; display: grid; gap: 0.75rem; padding: 1rem;
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 8px;
+  }
+  .diagram-canvas { overflow-x: auto; }
+  .scroll-hint { display: none; color: var(--muted); font-size: 0.8rem; margin: 0; }
+  figure.overflowing .scroll-hint { display: block; }
+  .diagram-canvas svg { display: block; margin-inline: auto; max-width: none; height: auto; }
+  .diagram-error { margin: 0; }
+  .diagram-error-note { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.5rem; }
+  .key {
+    list-style: none; margin: 0; padding: 0.75rem 0 0; border-top: 1px solid var(--rule);
+    display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; font-size: 0.85rem;
+  }
+  .key-label { font: 500 0.7rem/1.6 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .key li { display: flex; align-items: center; gap: 0.45rem; }
+  .key .meaning { color: var(--muted); }
+  .swatch { width: 1.1rem; height: 0.8rem; border-radius: 3px; border: 1.5px solid; flex: none; }
+  .swatch.role-new { background: var(--role-new-fill); border-color: var(--role-new-stroke); }
+  .swatch.role-changed { background: var(--role-changed-fill); border-color: var(--role-changed-stroke); }
+  .swatch.role-existing { background: var(--role-existing-fill); border-color: var(--role-existing-stroke); }
+  .swatch.role-external { background: var(--role-external-fill); border-color: var(--role-external-stroke); }
+  .swatch.role-data { background: var(--role-data-fill); border-color: var(--role-data-stroke); }
+
+  @media (max-width: 30rem) {
+    body { padding-block: 1.5rem 3rem; }
+    h1 { font-size: 1.5rem; }
+  }
+</style>
+
+<div class="page">
+  <header>
+    <span class="eyebrow">Plan explainer</span>
+    <h1>{{HEADING}}</h1>
+  </header>
+  <main id="explainer"></main>
+</div>
+
+<script type="application/json" id="explainer-source">{{SOURCE_JSON}}</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" integrity="sha384-+VfUPEb0PdtChMwmBcBmykRMDd+v6D/oFmB3rZM/puCMDYcIvF968OimRh4KQY9a" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js" integrity="sha384-rbtjAdnIQE/aQJGEgXrVUlMibdfTSa4PQju4HDhN3sR2PmaKFzhEafuePsl9H/9I" crossorigin="anonymous"></script>
+<script>
+(() => {
+  const ROLES = {
+    new: "added by this plan",
+    changed: "modified by this plan",
+    existing: "unchanged; shown for context",
+    external: "outside this codebase: a library, service or person",
+    data: "a stored record, file or table",
+  };
+  const MIN_SCALE = 0.8;
+  // Only these diagram types take classDef; front matter and %% lines may come first.
+  const ROLE_DIAGRAM = /^(?:---\n[\s\S]*?\n---\n)?(?:\s*%%.*\n)*\s*(flowchart|graph|stateDiagram)/;
+  const ROLE_USE = /:::(\w+)|^\s*class\s+[\w,\s]+?\s+(\w+)\s*;?\s*$/gm;
+
+  const source = JSON.parse(document.getElementById("explainer-source").textContent);
+  const root = document.getElementById("explainer");
+  // Plans quote issue and repo text, so rendered HTML is sanitized; without DOMPurify it shows as text.
+  const rendered = window.marked && window.DOMPurify ? DOMPurify.sanitize(marked.parse(source)) : null;
+  root.innerHTML = rendered ?? "";
+  if (rendered === null) {
+    const pre = document.createElement("pre");
+    pre.textContent = source;
+    root.append(pre);
+  }
+
+  const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+  function buildKey(src) {
+    if (!ROLE_DIAGRAM.test(src)) return null;
+    const used = new Set();
+    for (const m of src.matchAll(ROLE_USE)) {
+      const role = m[1] || m[2];
+      if (role in ROLES) used.add(role);
+    }
+    if (!used.size) return null;
+    const list = document.createElement("ul");
+    list.className = "key";
+    list.innerHTML = '<li class="key-label">Key</li>' + Object.keys(ROLES)
+      .filter((r) => used.has(r))
+      .map((r) => `<li><span class="swatch role-${r}" aria-hidden="true"></span><strong>${r}</strong><span class="meaning">${ROLES[r]}</span></li>`)
+      .join("");
+    return list;
+  }
+
+  const figures = [];
+  root.querySelectorAll("table").forEach((table) => {
+    const wrap = document.createElement("div");
+    wrap.className = "table-wrap";
+    table.replaceWith(wrap);
+    wrap.append(table);
+  });
+  root.querySelectorAll("pre > code").forEach((code) => {
+    if (code.classList.contains("language-mermaid")) {
+      const fig = document.createElement("figure");
+      fig.className = "diagram";
+      fig.dataset.source = code.textContent;
+      const canvas = document.createElement("div");
+      canvas.className = "diagram-canvas";
+      const hint = document.createElement("p");
+      hint.className = "scroll-hint";
+      hint.textContent = "Wider than the page: scroll sideways to see all of it.";
+      fig.append(hint, canvas);
+      const key = buildKey(code.textContent);
+      if (key) fig.append(key);
+      code.parentElement.replaceWith(fig);
+      figures.push(fig);
+    } else if (window.hljs) {
+      hljs.configure({ ignoreUnescapedHTML: true });
+      hljs.highlightElement(code);
+    }
+  });
+
+  const token = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  // Mermaid draws with fixed colours, so it reads the theme's tokens at draw time and redraws on a theme switch.
+  function withRoles(src) {
+    if (!ROLE_DIAGRAM.test(src)) return src;
+    const defs = Object.keys(ROLES).map((r) =>
+      `classDef ${r} fill:${token(`--role-${r}-fill`)},stroke:${token(`--role-${r}-stroke`)},color:${token(`--role-${r}-fg`)},stroke-width:1.5px`);
+    return `${src}\n${defs.join("\n")}`;
+  }
+
+  function showSource(fig, message) {
+    fig.querySelector(".diagram-canvas").innerHTML =
+      `<p class="diagram-error-note">${escapeHtml(message)}</p><pre class="diagram-error"><code>${escapeHtml(fig.dataset.source)}</code></pre>`;
+  }
+
+  let pass = 0;
+  async function drawAll() {
+    if (!figures.length) return;
+    if (!window.mermaid) {
+      figures.forEach((fig) => showSource(fig, "Mermaid did not load, so this diagram shows as source."));
+      return;
+    }
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches && document.documentElement.dataset.theme !== "light"
+      || document.documentElement.dataset.theme === "dark";
+    const node = token("--dg-node"), nodeFg = token("--dg-node-fg"), border = token("--dg-border");
+    const line = token("--dg-line"), bg = token("--surface"), fg = token("--fg");
+    const note = token("--dg-note"), noteFg = token("--dg-note-fg");
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "base",
+      fontFamily: token("--font-body"),
+      themeVariables: {
+        darkMode: dark, background: bg, fontFamily: token("--font-body"), fontSize: "15px",
+        primaryColor: node, primaryTextColor: nodeFg, primaryBorderColor: border,
+        secondaryColor: node, secondaryTextColor: nodeFg, secondaryBorderColor: border,
+        tertiaryColor: bg, tertiaryTextColor: fg, tertiaryBorderColor: border,
+        mainBkg: node, nodeBorder: border, nodeTextColor: nodeFg, textColor: fg, titleColor: fg,
+        lineColor: line, edgeLabelBackground: bg, clusterBkg: bg, clusterBorder: border,
+        noteBkgColor: note, noteTextColor: noteFg, noteBorderColor: border,
+        actorBkg: node, actorBorder: border, actorTextColor: nodeFg, actorLineColor: line,
+        signalColor: line, signalTextColor: fg, labelBoxBkgColor: node, labelBoxBorderColor: border,
+        labelTextColor: nodeFg, loopTextColor: fg, activationBkgColor: node, activationBorderColor: border,
+        sequenceNumberColor: bg, transitionColor: line, transitionLabelColor: fg, stateLabelColor: nodeFg,
+        stateBkg: node, altBackground: bg, classText: nodeFg,
+      },
+    });
+    pass += 1;
+    for (const [i, fig] of figures.entries()) {
+      const id = `explainer-diagram-${pass}-${i}`;
+      try {
+        const { svg } = await mermaid.render(id, withRoles(fig.dataset.source));
+        const canvas = fig.querySelector(".diagram-canvas");
+        canvas.innerHTML = svg;
+        // Mermaid's width="100%" shrinks a wide diagram until its text is unreadable. Shrink to
+        // MIN_SCALE at most (15px text stays at 12px) and scroll past that.
+        const drawn = canvas.querySelector("svg");
+        const natural = drawn?.viewBox?.baseVal?.width;
+        if (natural) {
+          const width = Math.min(natural, Math.max(canvas.clientWidth, natural * MIN_SCALE));
+          drawn.style.width = `${width}px`;
+          fig.classList.toggle("overflowing", width > canvas.clientWidth + 1);
+        }
+      } catch (err) {
+        document.getElementById(`d${id}`)?.remove();
+        // Report the author's own source, whose line numbers don't count the appended classDefs.
+        const own = await mermaid.parse(fig.dataset.source).then(() => err, (parseErr) => parseErr);
+        showSource(fig, `This diagram has a syntax error, so it shows as source. ${own?.message ?? ""}`.trim());
+      }
+    }
+  }
+
+  // Mermaid sizes each box from text measured at draw time; drawing before the web font loads clips labels.
+  Promise.all([
+    document.fonts.load(`15px ${token("--font-body")}`).catch(() => {}),
+    document.fonts.ready,
+  ]).then(drawAll);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
+  new MutationObserver(drawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+})();
+</script>

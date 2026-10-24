@@ -24,6 +24,7 @@ Personal Claude Code plugins, shared across my projects and with anyone contribu
 /plugin install tdd@jjc-claude-skills
 /plugin install commit-gate@jjc-claude-skills
 /plugin install attention-chime@jjc-claude-skills
+/plugin install plan-explainer@jjc-claude-skills
 ```
 
 ## Plugins
@@ -145,16 +146,38 @@ bell where there is no `afplay`.
 
 Full detail, including how to pick other sounds: [`plugins/attention-chime/README.md`](plugins/attention-chime/README.md).
 
+### `plan-explainer`
+
+A teaching companion for plan mode. The plan says what will change; the explainer says how the code
+works today and why the plan changes it this way, with keyed Mermaid diagrams and technical terms
+glossed in plain language.
+
+- **`plan-explainer` skill** — how to write it: a code map, the runtime flow, the design decisions
+  with the road not taken, and a glossary. Skipped for routine plans.
+- **Render hook** (PreToolUse on `ExitPlanMode`) — turns the plan's `## Explainer` section into a
+  page and opens it while the approval prompt waits. After approval, the model publishes the same
+  page as a private Artifact.
+
+It attaches to plan mode rather than replacing it, because plan mode's read-only rule is enforced by
+the permission layer, which no skill can reproduce. Dark mode first, with every colour pair checked
+at WCAG AA in both themes. Requires `python3` on `PATH`.
+
+Full detail: [`plugins/plan-explainer/README.md`](plugins/plan-explainer/README.md).
+
 ## What this runs on your machine
 
 Hooks execute on your machine with your permissions, so it's fair to want the list before installing:
 
-- **No network.** No plugin here makes an HTTP call, sends telemetry, or reports anything anywhere.
-  Everything is local `python3` and `git`, plus the in-process hooks modules of `commit-gate`
-  and `attention-chime` (which runs `afplay`).
+- **No network from a hook.** No hook here makes an HTTP call, sends telemetry, or reports anything
+  anywhere. Everything is local `python3` and `git`, plus the in-process hooks modules of
+  `commit-gate` and `attention-chime` (which runs `afplay`). The one exception is indirect: the page
+  `plan-explainer` opens in your browser loads `DOMPurify`, `marked`, `highlight.js` and `mermaid`
+  from pinned CDN URLs checked by Subresource Integrity hashes, and its font from Google Fonts.
 - **No writes to your repo.** `ruff-gate` never rewrites a file — it prints the `ruff` command that
   would. `intent-layer` only reports; the reminder and the harvest are text, not edits. `commit-gate`
   only refuses a commit or asks you about one; its state lives in memory for the session.
+  `plan-explainer` writes its two pages beside the plan file, under `~/.claude/plans/` unless your
+  `plansDirectory` setting points elsewhere, and opens one in your browser.
 - **It reads your session transcript.** The `intent-layer` commit hook scans this session's
   transcript under `~/.claude/projects/` to spot signs of a recurring pitfall, and keeps a small
   per-session state file under `~/.claude` so it speaks once instead of once per commit. That state
@@ -198,6 +221,10 @@ are re-read on each call, and `/reload-plugins` picks up changes to `hooks.json`
 manifests. The replacement is silent: `claude plugin list` still shows the marketplace copy as
 enabled, so check `/plugin` for the `@inline` rows. Run `claude plugin validate plugins/<name>`
 before pushing.
+
+Run a plugin's tests with `python3 -m unittest discover -s plugins/<name>/tests` for Python
+plugins, and `claude plugin test plugins/<name>` for the TypeScript mod plugins, where `unittest`
+reports OK after running 0 tests.
 
 Don't `claude plugin marketplace add` a local checkout of this repo — it registers under the same
 `jjc-claude-skills` name and replaces the GitHub marketplace on your machine.
