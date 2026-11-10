@@ -155,8 +155,8 @@ glossed in plain language.
 - **`plan-explainer` skill** — how to write it: a code map, the runtime flow, the design decisions
   with the road not taken, and a glossary. Skipped for routine plans.
 - **Render hook** (PreToolUse on `ExitPlanMode`) — turns the plan's `## Explainer` section into a
-  page and opens it while the approval prompt waits. After approval, the model publishes the same
-  page as a private Artifact.
+  page and opens it while the approval prompt waits. Nothing opens after approval; ask, and the
+  model publishes the page as a private Artifact.
 
 It attaches to plan mode rather than replacing it, because plan mode's read-only rule is enforced by
 the permission layer, which no skill can reproduce. Dark mode first, with every colour pair checked

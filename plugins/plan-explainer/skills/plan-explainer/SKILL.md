@@ -1,6 +1,6 @@
 ---
 name: plan-explainer
-description: Teach the plan while you write it — an `## Explainer` appendix in the plan file that walks the relevant code and the design decisions with keyed Mermaid diagrams, in technical language with a plain-language gloss in parentheses. A hook renders it to a dark-mode-legible page when the plan goes up for approval; after approval it is published as an Artifact. Use in plan mode for any non-trivial plan, before calling ExitPlanMode, and when the user asks to "explain the plan", "diagram the design", or "teach me how this works".
+description: Teach the plan while you write it — an `## Explainer` appendix in the plan file that walks the relevant code and the design decisions with keyed Mermaid diagrams, in technical language with a plain-language gloss in parentheses. A hook renders it to a dark-mode-legible page when the plan goes up for approval; it is published as an Artifact only on request. Use in plan mode for any non-trivial plan, before calling ExitPlanMode, and when the user asks to "explain the plan", "diagram the design", or "teach me how this works".
 ---
 
 # plan-explainer
@@ -78,7 +78,13 @@ Four parts, in this order. Leave out a part that has nothing true to say.
 
 ## After approval
 
-The hook wrote `<plan stem>.artifact.html` beside the plan file. Before starting the work:
+Start the work. The page the hook opened is the explainer's one view; don't publish or open it
+again, since a second page mid-task is a distraction.
+
+## Publishing on request
+
+When the user asks for a shareable copy, publish `<plan stem>.artifact.html`, which the hook wrote
+beside the plan file:
 
 1. Copy it into the session's scratchpad directory (the Artifact tool publishes only from the
    working directory or the scratchpad). With no scratchpad, ask before copying it into the
@@ -87,4 +93,4 @@ The hook wrote `<plan stem>.artifact.html` beside the plan file. Before starting
    the plan changes. Keep it private.
 3. Give the user the link in one line.
 
-Re-planned and approved again? Publish to the same file path, so the link stays the same.
+Asked again after a re-plan? Publish to the same file path, so the link stays the same.

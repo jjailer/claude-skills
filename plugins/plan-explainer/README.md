@@ -22,8 +22,8 @@ from there.
 
 The two pages are `<plan>.explainer.html`, a full document for the browser, and
 `<plan>.artifact.html`, the same page as a fragment for the Artifact tool, which supplies its own
-doctype and head. After you approve, the skill has the model publish the fragment as a private
-Artifact.
+doctype and head. That browser page is the only one you see: the model doesn't publish or reopen
+it after you approve. Ask for a shareable copy and it publishes the fragment as a private Artifact.
 
 ## Writing one
 
