@@ -16,4 +16,6 @@
 
 The suite's payloads are hand-built, so it can pass against a shape Claude Code doesn't send.
 Before calling a change done, trigger it live: commit under a node in a scratch repo, and for the
-failure path, commit and exit non-zero in the same call.
+failure path, commit and exit non-zero in the same call. The harvest's transcript fixtures are
+hand-built the same way: check a new transcript shape against a real file under
+`~/.claude/projects/` before trusting the test that uses it.

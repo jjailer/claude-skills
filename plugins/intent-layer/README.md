@@ -68,7 +68,9 @@ Capture runs this before it lands. Above roughly 1 in 3 it merges nodes upward, 
 section).
 
 The pitfall harvest holds the same bar. It needs two independent signals of real friction before it
-speaks, reports each signal once per session rather than once per commit, and gives an explicit cheap
+speaks, and reports each signal once rather than on every commit. It counts only friction since the
+session's last harvest: a commit made right after running the skill stays quiet, and friction that
+returns after a harvest speaks again, since the capture didn't hold. It also gives an explicit cheap
 exit — *iteration is not a pitfall.* Without that exit a review prompt manufactures findings to
 justify itself.
 

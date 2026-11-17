@@ -810,6 +810,15 @@ class Transcript:
             f"FAILED {test_id} - AssertionError\n1 failed", True,
         )
 
+    def harvest_skill(self, skill="intent-layer:harvesting-pitfalls"):
+        self._tool("Skill", {"skill": skill, "args": "x"}, "Launching skill", False)
+
+    def harvest_command(self, name="/intent-layer:harvesting-pitfalls"):
+        self._n += 1
+        self._add({"type": "user", "promptId": f"p{self._n}", "message": {
+            "content": f"<command-message>harvest</command-message>\n"
+                       f"<command-name>{name}</command-name>"}})
+
     def raw(self, *lines):
         with self.path.open("a") as handle:
             for line in lines:
@@ -828,12 +837,18 @@ class HarvestTest(RepoTestCase):
             self.repo.root,
         )
 
-    def commit(self, command="git commit --amend --no-edit"):
+    def commit(self, command="git commit --amend --no-edit", session=None):
+        transcript = self.transcript if session is None else session[1]
         return self.repo.run(
             command,
-            transcript_path=str(self.transcript.path),
-            session_id=self.SESSION,
+            transcript_path=str(transcript.path),
+            session_id=self.SESSION if session is None else session[0],
         )
+
+    def fresh_session(self, name):
+        """Its own transcript and its own dedupe state, so one case can't silence the next."""
+        path = self.repo.home / ".claude" / "projects" / "slug" / f"{name}.jsonl"
+        return name, Transcript(path, self.repo.root)
 
     def harvested(self, output):
         return "signals of a recurring pitfall" in output
@@ -889,6 +904,59 @@ class HarvestTest(RepoTestCase):
         self.transcript.correction()
         self.assertSilent(self.commit())
 
+    def two_families(self, transcript=None):
+        transcript = transcript or self.transcript
+        transcript.bash_error()
+        transcript.bash_error()
+        transcript.correction()
+        transcript.correction()
+
+    def test_friction_a_harvest_already_covered_stays_quiet(self):
+        """The end-of-feature harvest ran, then the commit: the prompt only repeats it."""
+        invocations = {
+            "skill": lambda t: t.harvest_skill(),
+            "bare skill": lambda t: t.harvest_skill("harvesting-pitfalls"),
+            "command": lambda t: t.harvest_command(),
+            "bare command": lambda t: t.harvest_command("/harvesting-pitfalls"),
+        }
+        for i, (label, invoke) in enumerate(invocations.items()):
+            with self.subTest(invocation=label):
+                session = self.fresh_session(f"sess-h{i}")
+                self.two_families(session[1])
+                invoke(session[1])
+                self.assertSilent(self.commit(session=session))
+
+    def test_friction_after_a_harvest_still_speaks(self):
+        """A harvest covers what came before it, not the rest of the session."""
+        self.transcript.harvest_skill()
+        self.two_families()
+        output = self.commit()
+        self.assertTrue(self.harvested(output), f"expected a harvest, got {output!r}")
+
+    def test_friction_that_returns_after_a_harvest_speaks_again(self):
+        """The capture didn't hold. Dedupe from before the harvest must not hide that."""
+        self.two_families()
+        self.assertTrue(self.harvested(self.commit()))
+        self.transcript.harvest_skill()
+        self.two_families()
+        output = self.commit()
+        self.assertTrue(self.harvested(output), f"expected a harvest, got {output!r}")
+
+    def test_each_family_starts_over_at_a_harvest(self):
+        """One family before the harvest and another after it are not two families."""
+        self.transcript.correction()
+        self.transcript.correction()
+        self.transcript.harvest_skill()
+        self.transcript.bash_error()
+        self.transcript.bash_error()
+        self.assertSilent(self.commit())
+
+    def test_an_unrelated_skill_does_not_count_as_a_harvest(self):
+        self.two_families()
+        self.transcript.harvest_skill("tdd:tdd")
+        output = self.commit()
+        self.assertTrue(self.harvested(output), f"expected a harvest, got {output!r}")
+
     def test_malformed_transcript_lines_are_skipped_not_fatal(self):
         """A crash here would also take the node section down with it."""
         self.transcript.raw(
@@ -898,6 +966,7 @@ class HarvestTest(RepoTestCase):
                 {"type": "tool_use", "id": "q1", "name": "Edit", "input": "nope"},
                 {"type": "tool_use", "id": "q2", "name": "Edit", "input": {"file_path": 7}},
                 {"type": "tool_use", "id": ["q3"], "name": ["Bash"], "input": {"command": 7}},
+                {"type": "tool_use", "id": "q4", "name": "Skill", "input": {"skill": ["x"]}},
             ]}}),
             json.dumps({"type": "user", "message": {"content": [
                 {"type": "tool_result", "tool_use_id": ["q3"], "content": [{"text": 5}],

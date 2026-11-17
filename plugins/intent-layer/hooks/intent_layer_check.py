@@ -108,6 +108,13 @@ CONVERSATIONAL = frozenset(
     {"ExitPlanMode", "AskUserQuestion", "EnterPlanMode", "TaskCreate", "TaskUpdate"}
 )
 SESSION_ID = re.compile(r"[\w-]+")
+# The harvest itself, invoked by the model as a Skill call or by the user as a
+# slash command, with or without the plugin prefix. Friction before it has been
+# harvested, so the scan starts over there.
+HARVEST_SKILLS = frozenset({"intent-layer:harvesting-pitfalls", "harvesting-pitfalls"})
+HARVEST_COMMAND = re.compile(
+    r"<command-name>/(?:intent-layer:)?harvesting-pitfalls</command-name>"
+)
 
 # git's commit summary line: `[main 1a2b3c4]`, `[main (root-commit) 1a2b3c4]`,
 # `[detached HEAD 1a2b3c4]`. The branch name and sha are not localized, so this
@@ -742,6 +749,10 @@ def scan_session(path, roots=()):
     Sidechain (subagent) turns are skipped throughout: a subagent's retries are
     its own business and it cannot carry a lesson back into the intent layer.
 
+    A harvest in the session zeroes every count. The friction before it was
+    already judged, so prompting for it again only repeats the harvest. The
+    number of harvests is returned too, so dedupe can start over with the counts.
+
     `roots` confines the churn signal to files inside the repo. Without it, plan
     files under ~/.claude/plans dominate: replaying real sessions they were
     edited 7-14 times apiece and appeared in most false fires. Iterating on a
@@ -752,14 +763,22 @@ def scan_session(path, roots=()):
     down with it.
     """
     prefixes = tuple(os.path.abspath(root) + os.sep for root in roots)
-    tools = {}           # tool_use_id -> (name, input)
-    test_fails = {}      # test id -> count
-    bash_errors = {}     # normalized command -> count
-    denials = {}         # tool name -> count
-    edits = {}           # file path -> count
-    corrections = 0
-    edit_between_failures = False
-    seen_failure = False
+    tools = {}           # tool_use_id -> (name, input); outlives a harvest
+    test_fails = bash_errors = denials = edits = None
+    corrections = harvests = 0
+    edit_between_failures = seen_failure = False
+
+    def start_over():
+        nonlocal test_fails, bash_errors, denials, edits
+        nonlocal corrections, edit_between_failures, seen_failure
+        test_fails = {}      # test id -> count
+        bash_errors = {}     # normalized command -> count
+        denials = {}         # tool name -> count
+        edits = {}           # file path -> count
+        corrections = 0
+        edit_between_failures = seen_failure = False
+
+    start_over()
 
     try:
         handle = open(path, encoding="utf-8", errors="replace")
@@ -795,6 +814,9 @@ def scan_session(path, roots=()):
                     tool_id = _key(block.get("id"))
                     if tool_id:
                         tools[tool_id] = (name, data)
+                    if name == "Skill" and _key(data.get("skill")) in HARVEST_SKILLS:
+                        start_over()
+                        harvests += 1
                     if name in ("Edit", "Write", "NotebookEdit"):
                         target = _key(data.get("file_path")) or ""
                         inside = not prefixes or os.path.abspath(target).startswith(prefixes)
@@ -808,6 +830,10 @@ def scan_session(path, roots=()):
                 # plumbing (<command-name>, <local-command-stdout>) arrives the
                 # same way and must not be mistaken for the user talking.
                 if isinstance(content, str) and entry.get("promptId"):
+                    if HARVEST_COMMAND.search(content):
+                        start_over()
+                        harvests += 1
+                        continue
                     stripped = content.strip()
                     if stripped and not stripped.startswith("<"):
                         if CORRECTION.match(stripped):
@@ -850,6 +876,7 @@ def scan_session(path, roots=()):
         "corrections": corrections,
         "denials": denials,
         "edits": edits,
+        "harvests": harvests,
     }
 
 
@@ -975,7 +1002,10 @@ def harvest(event, cwd, top):
 
     reported, remember = harvest_state(session_id(event))
     # Re-arm only on genuinely new friction. Without this the same two signals
-    # would be re-reported on every commit for the rest of the session.
+    # would be re-reported on every commit for the rest of the session. Each
+    # identity carries the harvest count, so friction that returns after a
+    # harvest is new again: the capture didn't hold, which is worth hearing.
+    evidence = [(f"{scan['harvests']}:{identity}", text) for identity, text in evidence]
     fresh = [text for identity, text in evidence if identity not in reported]
     if len(fresh) < FAMILIES_TO_FIRE:
         return None
