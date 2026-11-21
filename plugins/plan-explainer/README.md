@@ -17,7 +17,7 @@ from there.
 
 | Piece | What it does |
 |---|---|
-| `plan-explainer` skill | How to write the explainer: when to skip it, its four parts (code map, flow, design decisions, glossary), diagram rules, and the gloss-on-first-use language rule. |
+| `plan-explainer` skill | How to write the explainer: when to skip it, its five parts (code map, flow, design decisions as small decision records with the road not taken, takeaways with a check-yourself question, glossary), verbose diagram labels and keys, and the gloss-every-term-on-first-use rule. |
 | `render.py` hook (PreToolUse on `ExitPlanMode`) | Takes the plan's `## Explainer` section, writes two pages beside the plan file, and opens one in your browser. For a plan with no explainer, it writes nothing and removes any pages an earlier version of the plan left behind. |
 
 The two pages are `<plan>.explainer.html`, a full document for the browser, and
@@ -33,15 +33,32 @@ The model appends this to the plan file; the skill has the full rules.
 ## Explainer: Render With a Hook
 
 ### Code map
+**Question this answers:** what turns the plan into a page?
 ```mermaid
 flowchart TD
-  H([Claude Code]):::external -->|tool_input.plan| R[hooks/render.py]:::new
-  R -->|writes| P[(plan.explainer.html)]:::data
+  H(["Claude Code<br/>runs the hook on ExitPlanMode"]):::external -->|"tool_input.plan"| R["hooks/render.py: main()<br/>cuts out the Explainer"]:::new
+  R -->|"writes the rendered page"| P[("plan.explainer.html<br/>opened in your browser")]:::data
 ```
+*Key: stadium = outside this codebase; cylinder = a file on disk.*
 
 ### Design decisions
 #### Render in the page, not in Python
-Chose client-side `marked` over a Python parser: the hook stays *stdlib-only* (nothing to install).
+- **Chose:** `marked` (a JavaScript Markdown parser), loaded by the page from a CDN.
+- **Over:** a Python Markdown library, which every machine would have to install beside the hook.
+- **Flip signal:** the page has to render offline.
+
+(No **Pattern:** line: no established name fits this one, so the record leaves it out.)
+
+### Takeaways
+- A script that must run before anything is set up should need nothing installed. You'll meet
+  the same trade in git hooks and bootstrap scripts.
+
+<details><summary>Check yourself: why does the page need a network connection?</summary>
+
+The hook stays standard-library-only, so the parser comes from a CDN. Offline, the page shows the
+explainer as plain text. That is the price of the choice.
+
+</details>
 ````
 
 The name after `Explainer:` titles the page and the Artifact. Leave it off and the title is the

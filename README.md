@@ -153,7 +153,8 @@ works today and why the plan changes it this way, with keyed Mermaid diagrams an
 glossed in plain language.
 
 - **`plan-explainer` skill** — how to write it: a code map, the runtime flow, the design decisions
-  with the road not taken, and a glossary. Skipped for routine plans.
+  with the road not taken and the named pattern behind each, takeaways with a check-yourself
+  question, and a glossary. Skipped for routine plans.
 - **Render hook** (PreToolUse on `ExitPlanMode`) — turns the plan's `## Explainer` section into a
   page and opens it while the approval prompt waits. Nothing opens after approval; ask, and the
   model publishes the page as a private Artifact.
