@@ -48,9 +48,9 @@ model cannot re-derive from the source.
 - **Commit-time hook** — the trigger. On `git commit`, it reports nodes whose code changed without
   them, and flags a session showing signs of a recurring pitfall.
 
-Both triggers are built to stay quiet: the node reminder spoke on 2 commits in 8 replayed over a
-14-node repo's history, and the pitfall harvest needs two independent signals of real friction before
-it says anything. Requires `python3` on `PATH`.
+Both triggers are built to stay quiet: the node reminder skips any commit that updates a node with its
+code, and `--replay` measures how often it would speak on your own history. The pitfall harvest needs
+two independent signals of real friction before it says anything. Requires `python3` on `PATH`.
 
 Full detail: [`plugins/intent-layer/README.md`](plugins/intent-layer/README.md).
 
@@ -194,7 +194,7 @@ Hooks execute on your machine with your permissions, so it's fair to want the li
   `"enabled": false` in `.claude/ruff-gate.json`. It is already silent in any repo with no ruff
   config.
 - **Remove a plugin:** `/plugin uninstall intent-layer@jjc-claude-skills` (same shape for
-  `ruff-gate`).
+  every plugin here).
 - **Remove the source:** `/plugin marketplace remove jjc-claude-skills`.
 
 Uninstalling takes the hooks with it, and leaves nothing behind in your repos. The only residue is

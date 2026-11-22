@@ -28,7 +28,8 @@ It says nothing when a commit updates code and its node together, nothing when t
 no node, nothing for a file its node's `implicated-by` line leaves out (see *Narrowing what
 implicates a node*), and nothing about the repo root unless a top-level file changed — a root node
 nominally sits above everything, and a reminder that always fires is one you learn to ignore.
-Replayed over a 14-node repo's history it spoke on 2 commits in 8.
+How often it speaks depends on the layer, so measure it on your own history with `--replay`
+(below).
 
 A rename counts as both of its paths. A file moved out of a node's directory implicates the node it
 left as well as the one it joined, since the node it left may still name it.
